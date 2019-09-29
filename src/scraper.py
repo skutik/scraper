@@ -2,7 +2,9 @@ import requests
 import logging
 import requests_html
 from time import time
+import unicodedata
 from bs4 import BeautifulSoup
+import re
 
 logging.basicConfig()
 logging.getLogger().setLevel(logging.INFO)
@@ -58,26 +60,52 @@ def get_properties(url, headers, params={}):
                 return properties
                 break
 
-# def get_property_info(url):
+def parse_property_page(soupObject, url):
+    item = dict()
+    soup = soupObject
+    for ul in soup.find("div", class_="params clear").findAll("ul"):
+        for li in ul.findAll("li"): 
+            label = li.find("label").text[:-1]
+            value = list()
+            for span in li.findAll("span"):
+                if span.get("ng-if") == "item.type == 'boolean-false'":
+                    value = False
+                elif span.get("ng-if") == "item.type == 'boolean-true'":
+                    value = True
+                elif span.text == 'm2':
+                    pass
+                else: 
+                    value.append(unicodedata.normalize("NFKD",span.text))
+            if isinstance(value, list):
+                item[label] = " ".join(value)
+            else:
+                item[label] = value
 
-property_url = "https://www.sreality.cz/detail/pronajem/byt/1+1/praha-nove-mesto-palackeho/2534137436"
+    item["ad_id"] = url.split("/")[-1:][0]
+    item["adress"] = soup.find("span", class_="location-text ng-binding").text
+    price_string = unicodedata.normalize("NFKD",soup.find("span", class_="norm-price ng-binding").text)
+    logging.info(price_string)
+    price = re.findall(r"\d+", price_string)
+    item["price_value"] = "".join(price)
 
-# with requests_html.HTMLSession() as session:
-#     response = session.get(property_url)
-#     response.html.render()
-#     ad_id = property_url.split("/")[-1:]
-#     logging.info(ad_id)
-#     soup = BeautifulSoup(str(response.html.element), "lxml")
-#     logging.info(soup.find("div", class_="params_clear"))
-#
-#     logging.info(response.text)
+    return item
 
-with open("example.html") as file:
-    soup = BeautifulSoup(file, "lxml")
+async def get_properties_dict(properties):
+    properties_dict = dict()
+    for property in properties:
+        url = ENDPOINT_URL + property
+        logging.info(url)
+        async with requests_html.AsyncHTMLSession() as asession:
+            response = await asession.get(url, headers=HEADERS)
+            response.html.render()
+            soup = BeautifulSoup(str(response.html.element), "html.parser")
+        proterty_dict = parse_property_page(soup, url)
+        properties_dict[proterty_dict.get("ad_id")] = proterty_dict
+    return properties_dict
 
-logging.info(soup.find("div", class_="params clear"))
-
-# url = createURL(ENDPOINT_URL, city="praha-1")
-# logging.info(url)
-# properties = get_properties(url, headers=HEADERS, params=PARAMS)
-# logging.info(len(properties))
+url = createURL(ENDPOINT_URL, city="praha-1")
+logging.info(url)
+properties = get_properties(url, headers=HEADERS, params=PARAMS)
+properties = get_properties_dict(properties)
+# properties = get_properties_dict(["/detail/pronajem/byt/1+kk/praha-nove-mesto-na-struze/3262574172"])
+print(properties)
