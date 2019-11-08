@@ -5,13 +5,17 @@ from time import time
 import unicodedata
 from bs4 import BeautifulSoup
 import re
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import Pool
+from itertools import chain
 
 logging.basicConfig()
 logging.getLogger().setLevel(logging.INFO)
 
 ENDPOINT_URL = "https://www.sreality.cz"
 CITY = "praha"
-SIZE = ["1+kk", "1+1", "pokoj"]
+SIZE = ["pokoj"]
 
 HEADERS = {
     "Referer": "https://www.sreality.cz/hledani/pronajem/byty/praha?1%2Bkk",
@@ -43,14 +47,14 @@ def get_properties(url, headers, params={}):
             if response.status_code == 200:
                 response.html.render()
                 links = response.html.find("a")
-                logging.info(links)
+                # logging.info(links)
                 if links:
                     for link in links:
                         link = str(link)
                         if " href='/detail/" in link:
                             property_link = [element.split("=")[1].replace("'", "") for element in link.split() if element.startswith("href='/detail/")][0]
                             properties.add(property_link)
-                            logging.info(property_link)
+                            # logging.info(property_link)
                         elif "ng-class='{disabled: !pagingData.nextUrl}'" in link and "href='/hledani" in link:
                             nextPage = True
             else:
@@ -58,9 +62,8 @@ def get_properties(url, headers, params={}):
             counter += 1
             if not nextPage:
                 return properties
-                break
 
-def parse_property_page(soupObject, url):
+def parse_property_page(soupObject):
     item = dict()
     soup = soupObject
     for ul in soup.find("div", class_="params clear").findAll("ul"):
@@ -81,7 +84,7 @@ def parse_property_page(soupObject, url):
             else:
                 item[label] = value
 
-    item["ad_id"] = url.split("/")[-1:][0]
+    # item["ad_id"] = url.split("/")[-1:][0]
     item["adress"] = soup.find("span", class_="location-text ng-binding").text
     price_string = unicodedata.normalize("NFKD",soup.find("span", class_="norm-price ng-binding").text)
     logging.info(price_string)
@@ -90,22 +93,164 @@ def parse_property_page(soupObject, url):
 
     return item
 
-async def get_properties_dict(properties):
-    properties_dict = dict()
-    for property in properties:
-        url = ENDPOINT_URL + property
-        logging.info(url)
-        async with requests_html.AsyncHTMLSession() as asession:
-            response = await asession.get(url, headers=HEADERS)
-            response.html.render()
-            soup = BeautifulSoup(str(response.html.element), "html.parser")
-        proterty_dict = parse_property_page(soup, url)
-        properties_dict[proterty_dict.get("ad_id")] = proterty_dict
-    return properties_dict
+# await def test_as_get(pro):
+#     with requests_html.AsyncHTMLSession() as assesion:
+#         for prop in properties:
+#             logging.info(f"Logging currently processed propperty: {prop}")
+#             aresponse = await assesion.get(prop)
+#             await aresponse.html.arender()
+#             return aresponse.html.text
 
-url = createURL(ENDPOINT_URL, city="praha-1")
+async def get_property(assesion, prop):
+    logging.info(f"Processing page of property: {prop}")
+    aresponse = await assesion.get(prop)
+    await aresponse.html.arender(timeout=20000)
+    return aresponse.html.text
+
+async def get_data(properties):
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        with requests_html.AsyncHTMLSession() as assesion:
+            loop = asyncio.get_event_loop()
+            tasks = [await loop.run_in_executor(executor, get_property, *(assesion, prop)) for prop in properties]
+
+            return await asyncio.gather(*tasks)
+            
+                # soup = BeautifulSoup(str(response), "html.parser")
+                # logging.info(parse_property_page(soup))
+                # parsed_page parse_property_page(soup, prop)
+                # logging.info(response)
+                # return
+
+def main():
+    loop = asyncio.get_event_loop()
+    future = asyncio.ensure_future(get_data(properties))
+    loop.run_until_complete(future)
+    loop.close()
+
+url = createURL(ENDPOINT_URL, city="ostrava")
 logging.info(url)
 properties = get_properties(url, headers=HEADERS, params=PARAMS)
-properties = get_properties_dict(properties)
+logging.info(properties)
+properties = [ENDPOINT_URL + ad for ad in properties]
+main()
+
+# async def main(properties):
+#     asession = requests_html.AsyncHTMLSession()
+#     tasks = [get_property(asession, prop) for prop in properties]
+#     results = await asyncio.gather(*tasks)
+#     return list(chain(*(res for res in results)))
+
+# async def get_url_response(session, url, headers):
+#     response = await session.get(url, headers=headers)
+#     await response.html.arender()
+#     return response
+
+# async def get_properties_dict(properties):
+#     properties_dict = dict()
+#     with ThreadPoolExecutor(max_workers=10) as executor:
+#         with requests_html.AsyncHTMLSession() as assesion:
+#             loop = asyncio.get_event_loop()
+#             tasks = [await loop.run_in_executor(executor, get_url_response, *(assesion, ENDPOINT_URL + ad, HEADERS)) for ad in properties]
+#             for response in await asyncio.gather(*tasks):
+#                 logging.info(response)
+#                 soup = BeautifulSoup(str(response.html.element), "html.parser")
+#                 proterty_dict = parse_property_page(soup, url)
+#                 properties_dict[proterty_dict.get("ad_id")] = proterty_dict
+#     logging.info(properties_dict)
+
+# def main(properties):
+#     loop = asyncio.get_event_loop()
+#     furure = asyncio.ensure_future(get_properties_dict(properties))
+#     loop.run_until_complete(furure)
+#     return 
+
+# async def get_data_a_test(properties):
+#     responses = []
+#     asession = requests_html.AsyncHTMLSession()
+
+#     for prop in properties:
+#         response = asession.get(prop, headers=HEADERS) 
+#         response.html.arender()
+#         responses.append(response)
+
+#     return responses
+
+
+    # for prop in properties:
+    #     with requests_html.AsyncHTMLSession() as asession:
+    #             response = asession.get(prop, headers=HEADERS)
+    #             response.html.arender()
+    #             responses.append(response)
+    # logging.info(responses)
+    # return responses
+
+
+# def get_properties_dict(properties):
+#     properties_dict = dict()
+#     for property in properties:
+#         url = ENDPOINT_URL + property
+#         logging.info(url)
+#         with requests_html.HTMLSession() as session:
+#             response = session.get(url, headers=HEADERS)
+#             response.html.render()
+#             soup = BeautifulSoup(str(response.html.element), "html.parser")
+#         proterty_dict = parse_property_page(soup, url)
+#         properties_dict[proterty_dict.get("ad_id")] = proterty_dict
+#     return properties_dict
+
+# async def get_properties_dict(properties):
+#     properties_dict = dict()
+#     for property in properties:
+#         url = ENDPOINT_URL + property
+#         logging.info(url)
+#         with requests_html.AsyncHTMLSession() as asession:
+#             response = await asession.get(url, headers=HEADERS)
+#             response.html.render()
+#             soup = BeautifulSoup(str(response.html.element), "html.parser")
+#         proterty_dict = parse_property_page(soup, url)
+#         properties_dict[proterty_dict.get("ad_id")] = proterty_dict
+#     return properties_dict
+
+# url = createURL(ENDPOINT_URL, city="praha")
+# logging.info(url)
+# properties = get_properties(url, headers=HEADERS, params=PARAMS)
+# logging.info(properties)
+# properties = [ENDPOINT_URL + ad for ad in properties]
+# pages  = asyncio.run(main(properties))
+# print(pages)
+# loop = asyncio.get_event_loop()
+# x = loop.ensure_future(test_as_get(properties))
+# pool = Pool(processes=3)
+# output = pool.map(test_as_get, properties)
+# pool.close()
+# pool.join()
+# print(output)
+# logging.info(f"Test:{x}")
+
+
+
+# pool = Pool(processes=3)
+# output = pool.map(get_data_a_test, properties)
+# pool.close()
+# pool.join()
+# print(output)
+
+# asyncio.run(get_data_a_test(properties))
+
+# async def main():
+#     await get_data_a_test(properties)
+
+# loop = asyncio.get_event_loop()
+# loop.run_until_complete(main())
+
+# properties = get_properties_dict(properties)
+
+# pool = Pool(processes=1)
+# properties = pool.map(get_properties_dict, properties)
+# pool.close()
+# pool.join()
+
+# fails while processing https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-hrdlorezy-mezitratova/1961549404
+
 # properties = get_properties_dict(["/detail/pronajem/byt/1+kk/praha-nove-mesto-na-struze/3262574172"])
-print(properties)
+# print(properties)
