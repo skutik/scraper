@@ -1,51 +1,48 @@
-from pprint import pprint
-
-#from bs4 import BeautifulSoup
 import asyncio
-from timeit import default_timer
-from concurrent.futures import ThreadPoolExecutor
+import requests_html
+import logging
 
-from requests_html import AsyncHTMLSession, HTML
+logging.basicConfig()
+logging.getLogger().setLevel(logging.INFO)
 
-async def fetch(session, url):
-    r = await session.get(url)
-    await r.html.arender()
-    return r.content
+properties = ["https://www.sreality.cz/detail/pronajem/byt/pokoj/ostrava-moravska-ostrava-dr--smerala/2329996892",
+"https://www.sreality.cz/detail/pronajem/byt/pokoj/ostrava-zabreh-dolni/3135540828"]
 
-def parseWebpage(page):
-    print(page)
+async def get_data(async_session, url):
+    response = await async_session.get(url)
+    await response.html.arender()
+    return response
 
-async def get_data_asynchronous():  
-    urls = [
-        'http://www.fpb.pt/fpb2014/!site.go?s=1&show=jog&id=258215'
-    ]  
+async def process_adverts(properties):
+    with requests_html.AsyncHTMLSession() as asession:
 
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        with AsyncHTMLSession() as session:
-            # Set any session parameters here before calling `fetch` 
+        tasks = [get_data(asession, adv) for adv in properties]
+        results = await asyncio.gather(*tasks)
 
-            # Initialize the event loop        
-            loop = asyncio.get_event_loop()
+        return results
 
-            # Use list comprehension to create a list of
-            # tasks to complete. The executor will run the `fetch`
-            # function for each url in the urlslist
-            tasks = [
-                await loop.run_in_executor(
-                    executor,
-                    fetch,
-                    *(session, url) # Allows us to pass in multiple arguments to `fetch`
-                )
-                for url in urls
-            ]
+        # loop = asyncio.get_event_loop()
+        # pages = loop.run_until_complete(asyncio.gather(*tasks))
+        # for page in pages:
+        #     print(page.html.url)
 
-            # Initializes the tasks to run and awaits their results
-            for response in await asyncio.gather(*tasks):
-                parseWebpage(response)
+async def main():
+    asession = requests_html.AsyncHTMLSession()
+    tasks = [get_data(asession, adv) for adv in properties]
+    return await asyncio.gather(*tasks)
+    # return await asyncio.gather(*tasks)
+    
+    # for result in results:
+    #     print(result.html.text)
+    # loop = asyncio.get_event_loop()
+    # future = asyncio.ensure_future(process_adverts(properties))
+    # loop.run_until_complete(future)
+    # loop.close
 
-def main():
-    loop = asyncio.get_event_loop()
-    future = asyncio.ensure_future(get_data_asynchronous())
-    loop.run_until_complete(future)
+# asession = requests_html.AsyncHTMLSession()
+# asyncio.run(process_adverts(properties))
 
-main()
+loop = asyncio.get_event_loop()
+results = loop.run_until_complete(main())
+# results = asyncio.run(main())
+print([result.html.url for result in results])
