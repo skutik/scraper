@@ -8,15 +8,20 @@ class ParserTest(unittest.TestCase):
 
     testParser = Parser(html, "www.testpage.com")
     emptyParser = Parser("", "")
+    realUrlParser = Parser(html,"https://www.sreality.cz/detail/pronajem/byt/5+1/praha-vinor-uherska/142990940#img=0&fullscreen=false")
 
     def test_parser(self):
         advert_dict = self.testParser.get_dict()
         emptyPage = self.emptyParser.get_dict()
-        print(advert_dict)
-        self.assertEqual(len(advert_dict), 15)
+        realUrl = self.realUrlParser.get_dict()
+        self.assertEqual(len(advert_dict), 19)
         self.assertEqual(type(advert_dict["cena"]), int)
-        self.assertEqual(advert_dict["poznamka_k_cene"], "Služby 1000 Kč + provize RK")
-        self.assertEqual(advert_dict["url"],  "www.testpage.com")
+        self.assertEqual(advert_dict.get("id_zakazky"), 223849)
+        self.assertEqual(advert_dict.get("xyz"), None)
+        self.assertEqual(advert_dict.get("typ_smlouvy"), None)
+        self.assertEqual(realUrl.get("typ_smlouvy"), "pronajem")
+        self.assertEqual(realUrl.get("typ_nemovitosti"), "byt")
+        self.assertEqual(advert_dict["url"], "www.testpage.com")
         self.assertEqual(emptyPage,None)
         with self.assertRaises(TypeError):
             emptyPage["url"]
