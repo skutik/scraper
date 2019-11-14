@@ -42,24 +42,24 @@ def get_properties(url, headers, params={}):
             response = session.get(url,
                                    headers=headers,
                                    params=params)
-            logging.info(response.url)
+            # logging.info(response.url)
             nextPage = False
             if response.status_code == 200:
                 response.html.render()
-                with open("tests/pages/list_of_adverts.html", "w") as file:
-                    file.write(response.html.html)
-                break
+                # with open("tests/pages/list_of_adverts.html", "w") as file:
+                #     file.write(response.html.html)
+                # break
                 links = response.html.find("a")
                 # logging.info(links)
-                # if links:
-                #     for link in links:
-                #         link = str(link)
-                #         if " href='/detail/" in link:
-                #             property_link = [element.split("=")[1].replace("'", "") for element in link.split() if element.startswith("href='/detail/")][0]
-                #             properties.add(property_link)
-                #             # logging.info(property_link)
-                #         elif "ng-class='{disabled: !pagingData.nextUrl}'" in link and "href='/hledani" in link:
-                #             nextPage = True
+                if links:
+                    for link in links:
+                        link = str(link)
+                        if " href='/detail/" in link:
+                            property_link = [element.split("=")[1].replace("'", "") for element in link.split() if element.startswith("href='/detail/")][0]
+                            properties.add(property_link)
+                            # logging.info(property_link)
+                        elif "ng-class='{disabled: !pagingData.nextUrl}'" in link and "href='/hledani" in link:
+                            nextPage = True
             else:
                 raise(f"Got status code {response.status_code}")
             counter += 1
@@ -107,15 +107,12 @@ def parse_property_page(soupObject):
 #             await aresponse.html.arender()
 #             return aresponse.html.text
 
-async def get_property(assesion, prop, semaphore):
-    async with semaphore:
-        logging.info(f"Processing page of property: {prop}")
-        response = await assesion.get(prop)
-        try:
-            await response.html.arender(timeout=3000)
-        except:
-            response = None
-        return response
+# async def get_property(assesion, prop):
+#     # async with semaphore:
+#     logging.info(f"Processing page of property: {prop}")
+#     response = await assesion.get(prop)
+#     await response.html.arender(timeout=1000)
+#     return response
 
 # async def safe_get(assesion, adv, semaphore):
 #     async with semaphore:
@@ -135,13 +132,27 @@ async def get_property(assesion, prop, semaphore):
                 # logging.info(response)
                 # return
 
-async def main(propties_list):
-    asession = requests_html.AsyncHTMLSession()
-    semaphore = asyncio.Semaphore(5)
-    tasks = [asyncio.ensure_future(get_property(asession, adv, semaphore)) for adv in properties]
-    return await asyncio.gather(*tasks)
+async def fetch(prop, asession):
+    async with asession.get(prop) as response:
+        return await response.html.arender()
+
+async def bound_fetch(prop, asession, semaphore):
+    async with semaphore:
+        await fetch(prop, asession)
+
+async def run(propties_list):
+    asession = requests_html.AsyncHTMLSession(workers=2)
+    # semaphore = asyncio.Semaphore(2)
+    # results = asession.run(((asession, adv) for adv in properties))
+    # tasks = [asyncio.ensure_future(get_property(asession, adv)) for adv in properties]
+    # return await asyncio.gather(*tasks)
     # tasks = list()
     # semaphore = asyncio.BoundedSemaphore(5)
+    semaphore = asyncio.Semaphore(5)
+
+    tasks = [asyncio.ensure_future(bound_fetch(adv, asession, semaphore)) for adv in propties_list]
+    responses = asyncio.gather(*tasks)
+    return await responses
 
     # queue = asyncio.Queue()
     # tasks = [event_loop.create_task(get_property,)]
@@ -180,7 +191,8 @@ logging.info(f"Found adverts: {len(properties)}")
 properties = [ENDPOINT_URL + ad for ad in properties]
 loop = asyncio.get_event_loop()
 loop.set_debug(True)
-results = loop.run_until_complete(main(properties))
+future = asyncio.ensure_future(run(properties))
+results = loop.run_until_complete(future)
 print(results)
 # results = asyncio.run(main())
 # for result in results:
