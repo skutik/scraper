@@ -9,6 +9,12 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Pool
 import os
+from src.parser import Parser
+import pymongo
+import json
+
+mongoClient = pymongo.MongoClient("mongodb://127.0.0.1:27017/")
+propsColection = mongoClient["props_db"]["properties"]
 
 logging.basicConfig()
 logging.getLogger().setLevel(logging.INFO)
@@ -38,7 +44,7 @@ def get_properties(url, headers, params={}):
     logging.info(params)
     while True:
         with requests_html.HTMLSession() as session:
-            params["strana"] = counter
+            params["sprint(result.html.url)trana"] = counter
             response = session.get(url,
                                    headers=headers,
                                    params=params)
@@ -132,27 +138,24 @@ def parse_property_page(soupObject):
                 # logging.info(response)
                 # return
 
-async def fetch(prop, asession):
-    async with asession.get(prop) as response:
-        return await response.html.arender()
-
-async def bound_fetch(prop, asession, semaphore):
+async def fetch(prop, semaphore):
     async with semaphore:
-        await fetch(prop, asession)
+        asession = requests_html.AsyncHTMLSession()
+        response = await asession.get(prop)
+        await response.html.arender(timeout=30)
+        page = response
+        response.close()
+        await asession.close()
+    return page
+
+# async def bound_fetch(prop, asession, semaphore):
+#     async with semaphore:
+#         await fetch(prop, asession)
 
 async def run(propties_list):
-    asession = requests_html.AsyncHTMLSession(workers=2)
-    # semaphore = asyncio.Semaphore(2)
-    # results = asession.run(((asession, adv) for adv in properties))
-    # tasks = [asyncio.ensure_future(get_property(asession, adv)) for adv in properties]
-    # return await asyncio.gather(*tasks)
-    # tasks = list()
-    # semaphore = asyncio.BoundedSemaphore(5)
-    semaphore = asyncio.Semaphore(5)
-
-    tasks = [asyncio.ensure_future(bound_fetch(adv, asession, semaphore)) for adv in propties_list]
-    responses = asyncio.gather(*tasks)
-    return await responses
+    semaphore = asyncio.Semaphore(2)
+    tasks = [asyncio.ensure_future(fetch(adv, semaphore)) for adv in propties_list]
+    return await asyncio.gather(*tasks)
 
     # queue = asyncio.Queue()
     # tasks = [event_loop.create_task(get_property,)]
@@ -184,16 +187,58 @@ async def run(propties_list):
             #         file.close()
             # advert.html.url
 
-url = createURL(ENDPOINT_URL, city="praha")
-logging.info(url)
-properties = get_properties(url, headers=HEADERS, params=PARAMS)
-logging.info(f"Found adverts: {len(properties)}")
-properties = [ENDPOINT_URL + ad for ad in properties]
+# url = createURL(ENDPOINT_URL, city="praha")
+# logging.info(url)
+# properties = get_properties(url, headers=HEADERS, params=PARAMS)
+# logging.info(f"Found adverts: {len(properties)}")
+# properties = [ENDPOINT_URL + ad for ad in properties]
+# print(properties)
+# properties = [  'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-stodulky-pod-viaduktem/4140949084', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-karlin-/2899873372', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-stodulky-okruhova/2744639068', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-karlin-peckova/3676266844', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-hrdlorezy-mezitratova/1961549404', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/4203404892', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/3664895580',
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-konevova/907603548', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-krc-/2703658588', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-strasnice-u-hraze/273604188', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-vinohrady-belehradska/1850072668', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-vinohrady-trebizskeho/887152220', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/1267392092', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-hostavice-pilska/1719066204', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-chodov-klirova/4216381020', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/4201766492']
+
+properties = ["https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-vinohrady-belehradska/1850072668"]
 loop = asyncio.get_event_loop()
 loop.set_debug(True)
 future = asyncio.ensure_future(run(properties))
 results = loop.run_until_complete(future)
-print(results)
+for result in results:
+    page = Parser(result.html.html, result.html.url)
+    page_dict = page.get_dict()
+    print(page_dict)
+    # if page_dict is None:
+    #     print(result.html.url)
+    # res_dict[result.html.url] = [page_dict,result.html.html]
+    # print(res_dict)
+    
+    # if page:
+    #     print_var = f"""
+    #                 #####################################
+    #                 {result.html.url}
+    #                 {result.html.html}
+    #                 """
+
+    # if page_dict is not None:
+    #     if page_dict.get("id_zakazky") is not None:
+    #         page_dict["_id"] = page_dict.get("id_zakazky")
+    #     try:
+    #         mongodbRepsonse = propsColection.insert_one(page_dict)
+    #         print(mongodbRepsonse.inserted_id)
+    #     except pymongo.errors.DuplicateKeyError as dke:
+    #         print(dke)
 # results = asyncio.run(main())
 # for result in results:
 #     logging.info(f"Parsing URL {result.html.url}")
