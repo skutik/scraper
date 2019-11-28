@@ -17,7 +17,9 @@ class Scraper():
     }
 
     def __init__(self, city, size, search_type="pronajem", property_type="byty", headers=HEADERS):
-        self.city = city
+        if isinstance(city, str):
+            city = [city]
+        self.city = ",".join(city)
         self.headers = headers
         self.search_type = search_type
         self.property_type = property_type
@@ -26,13 +28,15 @@ class Scraper():
             size = [size]
         self.params = {"velikost": ",".join(size)}
 
+    @property
     def _generate_url(self):
         if isinstance(self.city, list):
             self.city = ",".join([self.city])
         return f"{self.ENDPOINT_URL}/hledani/{self.search_type}/{self.property_type}/{self.city}"
 
     def _get_properties(self):
-        url = self._generate_url()
+        url = self._generate_url
+        print(url)
         properties = set()
         counter = 1
         while True:
@@ -40,6 +44,7 @@ class Scraper():
                 self.params["strana"] = counter
                 response = session.get(
                     url, headers=self.headers, params=self.params)
+                print(response.url)
                 if response.status_code == 200:
                     response.html.render()
                     page = BeautifulSoup(response.html.html, "html.parser")
@@ -49,16 +54,17 @@ class Scraper():
                     if page.find_all("a", class_="btn-paging-pn icof icon-arr-right paging-next"):
                         counter += 1
                     else:
-                        return properties
+                        break
+        return properties
 
-    def _upsert_properties(mongoCollection, record_dict):
+    def _upsert_properties(self, mongoCollection, record_dict):
         doc_id = record_dict["_id"]
-        del page_dict["_id"]
-        x = propsColection.update_one(
+        del record_dict["_id"]
+        x = mongoCollection.update_one(
             {"_id": doc_id},
             {
                 "$setOnInsert": {"created_at_utc": datetime.utcnow()},
-                "$set": {**page_dict, **{"last_update": datetime.utcnow()}}
+                "$set": {**record_dict, **{"last_update": datetime.utcnow()}}
             },
             upsert=True)
         return x.raw_result

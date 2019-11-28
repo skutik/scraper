@@ -41,7 +41,6 @@ class Parser:
             #Repalce accents with english letter, unicode values and replace spaces with underscores
             item = {unidecode.unidecode(key).lower().replace(" ","_"):(unicodedata.normalize("NFKD",value) if isinstance(value, str) else value) 
                         for key, value in item.items()}     
-            print(item)
             return item
         else: 
             return None
