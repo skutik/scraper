@@ -1,4 +1,5 @@
 from src.scraper import Scraper
+import logging
 
-scraper = Scraper(city=["liberec", "ostrava"], size=["1+kk", "2+kk", "2+1", "4+1"])
+scraper = Scraper(city=["ostrava"], size=["4+1"])
 scraper.run()

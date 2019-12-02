@@ -6,7 +6,8 @@ from src.parser import Parser
 from datetime import datetime
 import logging
 import pyppeteer
-
+from os import getenv
+import hashlib
 
 class Scraper():
 
@@ -15,6 +16,8 @@ class Scraper():
         "Referer": "https://www.sreality.cz/hledani/pronajem/byty/praha?1%2Bkk",
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36"
     }
+
+    MONGODB_CONN_STRING = f"mongodb+srv://rw_dave:{getenv('MONGODB_RW_PASS')}@cluster0-6lpd8.mongodb.net/test?retryWrites=true&w=majority"
 
     def __init__(self, city, size, search_type="pronajem", property_type="byty", headers=HEADERS):
         if isinstance(city, str):
@@ -44,7 +47,7 @@ class Scraper():
                 self.params["strana"] = counter
                 response = session.get(
                     url, headers=self.headers, params=self.params)
-                print(response.url)
+                logging.info(response.url)
                 if response.status_code == 200:
                     response.html.render()
                     page = BeautifulSoup(response.html.html, "html.parser")
@@ -57,9 +60,12 @@ class Scraper():
                         break
         return properties
 
+    def _id_hash(self, input_string):
+        hash_object = hashlib.sha1(input_string.encode())
+        return hash_object.hexdigest()
+
     def _upsert_properties(self, mongoCollection, record_dict):
-        doc_id = record_dict["_id"]
-        del record_dict["_id"]
+        doc_id = self._id_hash(record_dict["url"])
         x = mongoCollection.update_one(
             {"_id": doc_id},
             {
@@ -98,25 +104,15 @@ class Scraper():
         loop = asyncio.get_event_loop()
         future = asyncio.ensure_future(self._run(properties))
         results = loop.run_until_complete(future)
-        with pymongo.MongoClient("mongodb://127.0.0.1:27017/") as mongoClient:
-            propsColection = mongoClient["props_db"]["properties"]
+        with pymongo.MongoClient(self.MONGODB_CONN_STRING) as mongoClient:
+            propsColection = mongoClient["test_db"]["props"]
             for result in results:
-                print(type(result))
                 if result:
                     page = Parser(result.html.html, result.html.url)
                     page_dict = page.get_dict()
-                    print(page)
                     if isinstance(page_dict, dict):
-                        doc_id = page_dict["_id"]
-                        del page_dict["_id"]
-                        propsColection.update_one(
-                            {"_id": doc_id},
-                            {
-                                "$setOnInsert": {"created_at_utc": datetime.utcnow()},
-                                "$set": {**page_dict, **{"last_update": datetime.utcnow()}}
-                            },
-                            upsert=True)
-        return f"Scraper finished."
+                        status = self._upsert_properties(propsColection, page_dict)
+                        logging.info(status)
         # try:
         #     record = propsColection.insert_one(page_dict)
         #     print(f"ID of inserted record {record.inserted_id}")
