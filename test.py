@@ -7,13 +7,18 @@ from os import getenv
 import hashlib
 from bs4 import BeautifulSoup
 
-with requests_html.HTMLSession() as session:
-    response = session.get("https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/1267392092")
-    response.html.render()
-    print(response.status_code)
-    print(response.html.html)
-    html = response.html.html
+# with requests_html.HTMLSession() as session:
+#     response = session.get("https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/1267392092")
+#     response.html.render()
+#     print(response.status_code)
+#     print(response.html.html)
+#     html = response.html.html
 
+with open("tests/pages/list_of_adverts_war.html") as html_file:
+    with requests_html.HTMLSession() as session:
+        response = session.get("https://www.sreality.cz/hledani/pronajem/byty/praha?velikost=pokoj")
+        print(response.text)
+        # htm = response.html.html
 
 # with open("tests/pages/failed_parse_page.html") as html_file:
 #     expired_html = html_file.read()
