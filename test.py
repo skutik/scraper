@@ -7,6 +7,43 @@ from os import getenv
 import hashlib
 from bs4 import BeautifulSoup
 
+HTML = """
+<!DOCTYPE html>
+<html>
+<body>
+<h1>Test links!</h1>
+<script>
+links = ["/proprery1", "/property2", "/property3"];
+links.forEach(function(item) {
+  var a = document.createElement('a');
+  var p = document.createElement('P');
+  var linkText = document.createTextNode("my title");
+  a.appendChild(linkText);
+  a.title = "my title text";
+  a.href = item;
+  a.className ="title";
+  p.appendChild(a);
+  document.body.appendChild(p);
+})
+</script>
+</body>
+</html>
+"""
+
+page = requests_html.HTML(html=HTML)
+print(page.html)
+page.render()
+print(page.html)
+
+bs = BeautifulSoup(page.html, "html.parser")
+if bs.find_all("a", class_="title"):
+    [print(a["href"]) for a in bs.find_all("a", class_="title")]
+
+# with open("tests/pages/list_of_adverts_raw.html", "r") as html_file:
+    
+#     html = requests_html.HTML(html=html_file.read())
+#     html.render()
+#     print(html.html)
 # with requests_html.HTMLSession() as session:
 #     response = session.get("https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/1267392092")
 #     response.html.render()
@@ -14,10 +51,10 @@ from bs4 import BeautifulSoup
 #     print(response.html.html)
 #     html = response.html.html
 
-with open("tests/pages/list_of_adverts_war.html") as html_file:
-    with requests_html.HTMLSession() as session:
-        response = session.get("https://www.sreality.cz/hledani/pronajem/byty/praha?velikost=pokoj")
-        print(response.text)
+# with open("tests/pages/list_of_adverts_raw.html", "w") as html_file:
+#     with requests_html.HTMLSession() as session:
+#         response = session.get("https://www.sreality.cz/hledani/pronajem/byty/praha?velikost=pokoj")
+#         html_file.write(response.text)
         # htm = response.html.html
 
 # with open("tests/pages/failed_parse_page.html") as html_file:

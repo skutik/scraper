@@ -57,8 +57,9 @@ class Scraper():
                     if page.find_all("a", class_="btn-paging-pn icof icon-arr-right paging-next"):
                         counter += 1
                     else:
-                        break
-        return properties
+                        return properties
+                else:
+                    return properties
 
     def _id_hash(self, input_string):
         hash_object = hashlib.sha1(input_string.encode())
@@ -76,18 +77,19 @@ class Scraper():
         return x.raw_result
         
 
-    async def _fetch_data(self, prop, semaphore):
+    async def _fetch_data(self, prop, semaphore, timeout=20):
         async with semaphore:
             asession = requests_html.AsyncHTMLSession()
-            print(f"Processing {prop}")
+            logging.info(f"Processing {prop}")
             page = None
             response = await asession.get(prop)
             try:
-                await response.html.arender(timeout=2)
+                print(response.url)
+                await response.html.arender(timeout=timeout)
                 page = response
                 response.close()
             except pyppeteer.errors.TimeoutError as error:
-                print(f"During rendering {prop} occurred error {error}")
+                logging.info(f"During rendering {prop} occurred error {error}")
             finally:
                 await asession.close()
                 return page

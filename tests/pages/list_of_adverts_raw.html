@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="{{ html.lang }}" ng-app="sreality" ng-controller="MainCtrl">
+<head>
+	<meta charset="utf-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width,initial-scale=1,minimal-ui">
+
+	<!--- Nastaveni meta pres JS a ne pres Angular, aby byla nastavena default hodnota pro agenty co nezvladaji PhantomJS --->
+	<title ng:bind-template="{{metaSeo.title}}">Sreality.cz â¢ reality a nemovitosti z celÃ© ÄR</title>
+	<meta name="description" content="NejvÄtÅ¡Ã­ nabÃ­dka nemovitostÃ­ v ÄR. NabÃ­zÃ­me byty, domy, novostavby, nebytovÃ© prostory, pozemky a dalÅ¡Ã­ reality k prodeji i pronÃ¡jmu. Sreality.cz">
+	<meta property="og:title"       content="Sreality.cz â¢ reality a nemovitosti z celÃ© ÄR">
+	<meta property="og:type"        content="website">
+	<meta property="og:image"       content="https://www.sreality.cz/img/sreality-logo-og.png">
+	<meta property="og:description" content="NejvÄtÅ¡Ã­ nabÃ­dka nemovitostÃ­ v ÄR. NabÃ­zÃ­me byty, domy, novostavby, nebytovÃ© prostory, pozemky a dalÅ¡Ã­ reality k prodeji i pronÃ¡jmu. Sreality.cz">
+	<meta property="og:url"         content="https://www.sreality.cz/">
+
+	<meta ng-if="metaStatus.value" name="szn:status" content="{{metaStatus.value}}">
+
+	<meta http-equiv="imagetoolbar" content="no">
+
+	<link rel="icon" sizes="16x16 32x32 48x48 64x64" href="/img/icons/favicon.ico">
+	<link rel="apple-touch-icon" sizes="57x57" href="/img/icons/apple-touch-icon-57x57.png?3">
+	<link rel="apple-touch-icon" sizes="60x60" href="/img/icons/apple-touch-icon-60x60.png?3">
+	<link rel="apple-touch-icon" sizes="72x72" href="/img/icons/apple-touch-icon-72x72.png?3">
+	<link rel="apple-touch-icon" sizes="76x76" href="/img/icons/apple-touch-icon-76x76.png?3">
+	<link rel="apple-touch-icon" sizes="114x114" href="/img/icons/apple-touch-icon-114x114.png?3">
+	<link rel="apple-touch-icon" sizes="120x120" href="/img/icons/apple-touch-icon-120x120.png?3">
+	<link rel="apple-touch-icon" sizes="144x144" href="/img/icons/apple-touch-icon-144x144.png?3">
+	<link rel="apple-touch-icon" sizes="152x152" href="/img/icons/apple-touch-icon-152x152.png?3">
+	<link rel="apple-touch-icon" sizes="180x180" href="/img/icons/apple-touch-icon-180x180.png?3">
+	<link rel="icon" type="image/png" sizes="192x192"  href="/img/icons/android-chrome-192x192.png">
+	<link rel="icon" type="image/png" sizes="32x32" href="/img/icons/favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="96x96" href="/img/icons/favicon-96x96.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="/img/icons/favicon-16x16.png">
+	<link rel="manifest" href="/img/icons/android-chrome-manifest.json">
+	<meta name="msapplication-TileColor" content="#2b5797">
+	<meta name="msapplication-TileImage" content="/img/icons/ms-icon-144x144.png">
+	<meta name="msapplication-config" content="/img/icons/browserconfig.xml" />
+
+	<link rel="alternate" type="application/rss+xml" ng-href="{{ rss.url }}" ng-if="rss.url">
+	<link ng-repeat="lang in metaSeo.languages" rel="alternate" hreflang="{{lang.code}}" ng-href="{{lang.url}}">
+
+	<link rel="stylesheet" href="/css/all.css?2f1f06b">
+
+	<!-- Begin Inspectlet Embed Code -->
+	<script type="text/javascript" id="inspectletjs">
+	window.__insp = window.__insp || [];
+	__insp.push(['wid', 821249485]);
+	__insp.push(["virtualPage"]);
+	(function() {
+	function ldinsp(){if(typeof window.__inspld != "undefined") return; window.__inspld = 1; var insp = document.createElement('script'); insp.type = 'text/javascript'; insp.async = true; insp.id = "inspsync"; insp.src = ('https:' == document.location.protocol ? 'https' : 'http') + '://cdn.inspectlet.com/inspectlet.js'; var x = document.getElementsByTagName('script')[0]; x.parentNode.insertBefore(insp, x); };
+	setTimeout(ldinsp, 500); document.readyState != "complete" ? (window.attachEvent ? window.attachEvent('onload', ldinsp) : window.addEventListener('load', ldinsp, false)) : ldinsp();
+	})();
+	</script>
+	<!-- End Inspectlet Embed Code -->
+
+	<!-- Google Tag Manager -->
+	<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start': new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0], j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src= 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f); })(window,document,'script','dataLayer','GTM-5Z296JF');</script>
+	<!-- End Google Tag Manager -->
+
+	<!--[if lte IE 8]>
+		<script>
+			document.createElement('popover');
+			document.createElement('mortgage');
+			document.createElement('hp-signpost');
+			document.createElement('category-switcher');
+			document.createElement('feedback');
+			document.createElement('bottom');
+			document.createElement('graph');
+			document.createElement('panorama');
+			document.createElement('panorama-prev');
+			document.createElement('sphere-viewer');
+			document.createElement('sphere-viewer-prev');
+			document.createElement('save-filter');
+		</script>
+    <![endif]-->
+
+	<!-- Statistiky -->
+	<script src="https://h.imedia.cz/js/dot-small.js" type="text/javascript"></script>
+	<script type="text/javascript">
+		(function() {
+			try {
+				// PÅi pÅesmÄrovÃ¡nÃ­ na hashbang URL (IE8-9) ztrÃ¡cÃ­me referrer,
+				// kterÃ½ je potÅeba pro sprÃ¡vnÃ© poÄÃ­tÃ¡nÃ­ statistik.
+				if (window.sessionStorage) { // nÄkdo mÅ¯Å¾e mÃ­t DOM storage zakÃ¡zanÃ½
+					var l = document.createElement('a');
+					l.href = document.referrer;
+					var referrerHostname = l.hostname;
+
+					if (window.location.hostname != referrerHostname) {
+						window.sessionStorage.setItem('referrer', l.href);
+					}
+				}
+
+				// StarÃ½ android (< 4.0) v kombinaci s angularem Å¡patnÄ pracuje s hashem v URL.
+				// PovaÅ¾uje ho za souÄÃ¡st query pÅÃ­padnÄ path.
+				// Na takovÃ½ch zaÅÃ­zech se budeme tvÃ¡Åit, Å¾e Å¾Ã¡dnÃ½ hash nebyl.
+				if (parseInt((/android (\d+)/.exec(window.navigator.userAgent.toLowerCase()) || [])[1], 10) < 4) {
+					var hrefWithoutHashbang = window.location.href.replace('/#!', '');
+					var hashIndex = hrefWithoutHashbang.indexOf('#');
+					if (hashIndex != -1) {
+						window.location.replace(hrefWithoutHashbang.substring(0, hashIndex));
+					}
+				}
+			} catch (e) {}
+		})();
+	</script>
+
+	<!-- API mapy.cz -->
+	<script type="text/javascript" src="https://api4.mapy.cz/loader.js"></script>
+	<script type="text/javascript">Loader.load(null, {poi: true, pano: true})</script>
+
+	<!-- Login reklama -->
+	<script src="https://i.imedia.cz/js/im3.js" type="text/javascript"></script>
+
+	<script src="https://1.im.cz/software/promo/promo-sbrowser.js"></script>
+
+	<!-- RozkopÃ­rovÃ¡nÃ­ SID cookie -->
+	<script src="https://h.imedia.cz/js/sid.js"></script>
+
+	<!-- Seznam player-->
+	<script src="//d53-a.sdn.cz/d_53/10/loader.min.js"></script>
+
+	<!-- Login -->
+	<script src="https://login.szn.cz/js/api/login.js"></script>
+
+	<!-- Seznam geo lokace -->
+	<script src="https://geo.seznam.cz/static/js/geo.js"></script>
+
+	<!-- KONFIGURACE -->
+	<script src="/js/conf/config.js?2f1f06b"></script>
+	<script src="/js/advert.js"></script>
+	<script src="/js/all.js?2f1f06b"></script>
+
+	<script type="text/javascript">
+		if (window.DOT) {
+			var dotCfg = {
+				service: 'sreality'
+			};
+			if (window.SrealityABTest && window.SrealityABTest.getVariant()) {
+				dotCfg.abtest = window.SrealityABTest.getVariant();
+			}
+			DOT.cfg(dotCfg);
+		}
+	</script>
+
+	<noscript>
+		<meta http-equiv="refresh" content="0;url=?_escaped_fragment_="/>
+	</noscript>
+	<meta name="fragment" content="!" ng-if="metaSeo.showMetaFragment" />
+
+</head>
+<!--[if IE 8]>    <body class="ie8"> <![endif]-->
+<!--[if IE 9]>    <body class="notie8 ie9"> <![endif]-->
+<!--[if gt IE 9]><!-->
+<body class="notie8 notie9 lang-{{html.lang}}">
+<!--<![endif]-->
+
+	<!-- Google Tag Manager (noscript) -->
+	<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-5Z296JF" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+	<!-- End Google Tag Manager (noscript) -->
+
+	<div loading-line></div>
+
+	<div page-layout>
+		<div ng-view></div>
+	</div>
+</body>
+</html>
