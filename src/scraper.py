@@ -39,7 +39,6 @@ class Scraper():
 
     def _get_properties(self):
         url = self._generate_url
-        print(url)
         properties = set()
         counter = 1
         while True:
@@ -77,27 +76,28 @@ class Scraper():
         return x.raw_result
         
 
-    async def _fetch_data(self, prop, semaphore, timeout=20):
+    async def _fetch_data(self, prop, semaphore, timeout):
         async with semaphore:
             asession = requests_html.AsyncHTMLSession()
             logging.info(f"Processing {prop}")
             page = None
             response = await asession.get(prop)
             try:
-                print(response.url)
                 await response.html.arender(timeout=timeout)
                 page = response
+                print(f"page: {page}")
                 response.close()
             except pyppeteer.errors.TimeoutError as error:
+                print(error)
                 logging.info(f"During rendering {prop} occurred error {error}")
             finally:
                 await asession.close()
                 return page
 
-    async def _run(self, propties_list):
+    async def _run(self, propties_list, timeout=20):
         semaphore = asyncio.Semaphore(2)
         tasks = [asyncio.ensure_future(self._fetch_data(
-            adv, semaphore)) for adv in propties_list]
+            adv, semaphore, timeout)) for adv in propties_list]
         return await asyncio.gather(*tasks)
 
     def run(self):

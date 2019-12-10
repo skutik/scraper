@@ -30,26 +30,7 @@ links.forEach(function(item) {
 </html>
 """
 
-HTML_script_rendered = """
-<!DOCTYPE html><html><head></head><body>
-<h1>Test links!</h1>
-<script>
-links = ["/proprery1", "/property2", "/property3"];
-links.forEach(function(item) {
-  var a = document.createElement('a');
-  var p = document.createElement('P');
-  var linkText = document.createTextNode("my title");
-  a.appendChild(linkText);
-  a.title = "my title text";
-  a.href = item;
-  a.className ="title";
-  p.appendChild(a);
-  document.body.appendChild(p);
-})
-</script><p><a title="my title text" href="/proprery1" class="title">my title</a></p><p><a title="my title text" href="/property2" class="title">my title</a></p><p><a title="my title text" href="/property3" class="title">my title</a></p>
-
-</body></html>
-"""
+script_render_links = """<p><a title="my title text" href="/property1" class="title">my title</a></p><p><a title="my title text" href="/property2" class="title">my title</a></p><p><a title="my title text" href="/property3" class="title">my title</a></p>"""
 
 HTML_delay = """
 <!DOCTYPE html>
@@ -57,6 +38,8 @@ HTML_delay = """
 <body>
 <h1>Test links!</h1>
 <script>
+var delayInSeconds = 10;
+setTimeout(function() {
 links = ["/property1", "/property2", "/property3"];
 links.forEach(function(item) {
   var a = document.createElement('a');
@@ -69,6 +52,7 @@ links.forEach(function(item) {
   p.appendChild(a);
   document.body.appendChild(p);
 })
+}, delayInSeconds*1000);
 </script>
 </body>
 </html>
@@ -89,7 +73,7 @@ def mocked_requests_get(*args, **kwargs):
         return MockResponse(HTML(html=HTML_script), 200)
     return MockResponse(None, 404)
 
-def mocked_async_requests_get(*args, **kwargs):
+async def mocked_async_requests_get(*args, **kwargs):
     class MockResponse:
         def __init__(self, html, status_code):
             self.html = html
@@ -97,9 +81,9 @@ def mocked_async_requests_get(*args, **kwargs):
             self.url = "mock.async_test.page"
 
     if args[0] == "/timeout_test":
-        return MockResponse(HTML(html=HTML_delay), 200)
+        return MockResponse(HTML(html=HTML_delay, async_=True), 200)
     elif args[0] == "/test":
-        return MockResponse(HTML(html=HTML_script), 200)
+        return MockResponse(HTML(html=HTML_script, async_=True), 200)
     return MockResponse(None, 404)
 
 class ScraperTest(unittest.TestCase):
@@ -122,14 +106,20 @@ class ScraperTest(unittest.TestCase):
             self.assertEqual(len(properties_render), 3)
             self.assertEqual(properties_render, {"/property1", "/property2", "/property3"})
     
-    async def test_mock_async_rendering(self):
+    def test_mock_async_rendering(self):
         with patch("src.scraper.requests_html.AsyncHTMLSession.get", side_effect=mocked_async_requests_get):
-            loop = asyncio.get_event_loop()
-            semaphore = asyncio.Semaphore(1)
-            result = loop.run_until_complete(self.render_test._fetch_data("/test", semaphore))
-            self.assertEqual(result, HTML_script_rendered)
+            loop_test = asyncio.get_event_loop()
+            future_test = asyncio.ensure_future(self.render_test._run(["/test"]))
+            results_test = loop_test.run_until_complete(future_test)
+            self.assertEqual(script_render_links in results_test[0].html.html, True)
 
-        
+            # loop_delay = asyncio.get_event_loop()
+            # future_delay = asyncio.ensure_future(self.render_test._run(["/timeout_test"], timeout=5))
+            # results_delay = loop_delay.run_until_complete(future_delay) 
+
+            # print(results_delay[0].html.html)
+
+            # self.assertEqual(script_render_links in results_delay[0].html.html, True)
 
 if __name__ == "__main__":
     unittest.main()
