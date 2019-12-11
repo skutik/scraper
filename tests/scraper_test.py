@@ -111,15 +111,13 @@ class ScraperTest(unittest.TestCase):
             loop_test = asyncio.get_event_loop()
             future_test = asyncio.ensure_future(self.render_test._run(["/test"]))
             results_test = loop_test.run_until_complete(future_test)
-            self.assertEqual(script_render_links in results_test[0].html.html, True)
+            self.assertEqual(script_render_links in results_test[0][1].html.html, True)
 
-            # loop_delay = asyncio.get_event_loop()
-            # future_delay = asyncio.ensure_future(self.render_test._run(["/timeout_test"], timeout=5))
-            # results_delay = loop_delay.run_until_complete(future_delay) 
-
-            # print(results_delay[0].html.html)
-
-            # self.assertEqual(script_render_links in results_delay[0].html.html, True)
+            loop_delay = asyncio.get_event_loop()
+            future_delay = asyncio.ensure_future(self.render_test._run(["/non_ok_reposnse"], timeout=5))
+            results_delay = loop_delay.run_until_complete(future_delay) 
+            self.assertEqual(results_delay[0][1], None)
+            self.assertEqual(results_delay[0][0],"/non_ok_reposnse")
 
 if __name__ == "__main__":
     unittest.main()
