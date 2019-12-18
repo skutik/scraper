@@ -90,7 +90,7 @@ class Scraper():
             if not os.path.exists(directory):
                 os.mkdir(directory)
 
-        with open("filename", "r+") as backup_file:
+        with open(backup_file, "r+") as backup_file:
             current_backup = json.loads(backup_file.read())
             if current_backup[doc_id]:
                 updated_backup = self._compare_dicts(record_dict, current_backup[doc_id])
