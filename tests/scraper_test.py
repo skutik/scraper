@@ -122,13 +122,17 @@ class ScraperTest(unittest.TestCase):
             self.assertEqual(len(properties_render), 3)
             self.assertEqual(properties_render, {"/property1", "/property2", "/property3"})
     
-    async def test_mock_async_rendering(self):
+    def test_mock_async_rendering(self):
         with patch("src.scraper.requests_html.AsyncHTMLSession.get", side_effect=mocked_async_requests_get):
             loop = asyncio.get_event_loop()
             semaphore = asyncio.Semaphore(1)
             result = loop.run_until_complete(self.render_test._fetch_data("/test", semaphore))
-            self.assertEqual(result, HTML_script_rendered)
+            print(result)
+            self.assertEqual(result, "sssdadada")
 
+    def run_async_tests(self):
+        loop = asyncio.get_event_loop()
+        results = loop.run_until_complete(self.test_mock_async_rendering())
         
 
 if __name__ == "__main__":
