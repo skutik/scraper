@@ -3,41 +3,52 @@ import requests_html
 import logging
 import pymongo
 from datetime import datetime
-from os import getenv
+import os
 import hashlib
 from bs4 import BeautifulSoup
 
-HTML = """
-<!DOCTYPE html>
-<html>
-<body>
-<h1>Test links!</h1>
-<script>
-links = ["/proprery1", "/property2", "/property3"];
-links.forEach(function(item) {
-  var a = document.createElement('a');
-  var p = document.createElement('P');
-  var linkText = document.createTextNode("my title");
-  a.appendChild(linkText);
-  a.title = "my title text";
-  a.href = item;
-  a.className ="title";
-  p.appendChild(a);
-  document.body.appendChild(p);
-})
-</script>
-</body>
-</html>
-"""
+print(os.getenv('MONGODB_RW_PASS'))
 
-page = requests_html.HTML(html=HTML)
-print(page.html)
-page.render()
-print(page.html)
+backup_file = "test.json"
 
-bs = BeautifulSoup(page.html, "html.parser")
-if bs.find_all("a", class_="title"):
-    [print(a["href"]) for a in bs.find_all("a", class_="title")]
+if "/" in backup_file:
+  directory = backup_file.split("/")[0]+"/"
+  if not os.path.exists(directory):
+    os.mkdir(directory)
+else:
+  print("No dir")
+
+# HTML = """
+# <!DOCTYPE html>
+# <html>
+# <body>
+# <h1>Test links!</h1>
+# <script>
+# links = ["/proprery1", "/property2", "/property3"];
+# links.forEach(function(item) {
+#   var a = document.createElement('a');
+#   var p = document.createElement('P');
+#   var linkText = document.createTextNode("my title");
+#   a.appendChild(linkText);
+#   a.title = "my title text";
+#   a.href = item;
+#   a.className ="title";
+#   p.appendChild(a);
+#   document.body.appendChild(p);
+# })
+# </script>
+# </body>
+# </html>
+# """
+
+# page = requests_html.HTML(html=HTML)
+# print(page.html)
+# page.render()
+# print(page.html)
+
+# bs = BeautifulSoup(page.html, "html.parser")
+# if bs.find_all("a", class_="title"):
+#     [print(a["href"]) for a in bs.find_all("a", class_="title")]
 
 # with open("tests/pages/list_of_adverts_raw.html", "r") as html_file:
     
