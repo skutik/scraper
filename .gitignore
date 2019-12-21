@@ -1,8 +1,6 @@
 
 *.code-workspace
-
 *.pyc
-
 **/.idea/
-
 **/__pycache__/
+.env
