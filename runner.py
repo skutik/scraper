@@ -1,5 +1,8 @@
 from src.scraper import Scraper
 import logging
 
-scraper = Scraper(city=["ostrava"], size=["4+1"])
+logging.getLogger().setLevel(logging.INFO)
+
+# scraper = Scraper(city=["praha-5"], size=["4+1"])
+scraper = Scraper()
 scraper.run()

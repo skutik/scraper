@@ -9,9 +9,10 @@ import pyppeteer
 import os
 import hashlib
 import json
+import collections.abc
+
 
 class Scraper():
-
     ENDPOINT_URL = "https://www.sreality.cz"
     HEADERS = {
         "Referer": "https://www.sreality.cz/hledani/pronajem/byty/praha?1%2Bkk",
@@ -20,23 +21,31 @@ class Scraper():
 
     MONGODB_CONN_STRING = f"mongodb+srv://rw_dave:{os.getenv('MONGODB_RW_PASS')}@cluster0-6lpd8.mongodb.net/test?retryWrites=true&w=majority"
 
-    def __init__(self, city, size, search_type="pronajem", property_type="byty", headers=HEADERS):
-        if isinstance(city, str):
-            city = [city]
-        self.city = ",".join(city)
+    queue = asyncio.Queue()
+
+    def __init__(self, city=None, size=None, search_type="pronajem", property_type="byty", headers=HEADERS):
+        if city:
+            if isinstance(city, str):
+                city = [city]
+            self.city = ",".join(city)
+        else:
+            self.city = city
         self.headers = headers
         self.search_type = search_type
         self.property_type = property_type
         self.property_type = property_type
-        if isinstance(size, str):
-            size = [size]
-        self.params = {"velikost": ",".join(size)}
+        if size:
+            if isinstance(size, str):
+                size = [size]
+            self.params = {"velikost": ",".join(size)}
+        else:
+            self.params = dict()
 
     @property
     def _generate_url(self):
         if isinstance(self.city, list):
             self.city = ",".join([self.city])
-        return f"{self.ENDPOINT_URL}/hledani/{self.search_type}/{self.property_type}/{self.city}"
+        return f"{self.ENDPOINT_URL}/hledani/{self.search_type}/{self.property_type}/{self.city}" if self.city else f"{self.ENDPOINT_URL}/hledani/{self.search_type}/{self.property_type}"
 
     def _get_properties(self):
         url = self._generate_url
@@ -49,7 +58,7 @@ class Scraper():
                     url, headers=self.headers, params=self.params)
                 logging.info(response.url)
                 if response.status_code == 200:
-                    response.html.render()
+                    response.html.render(timeout=30)
                     page = BeautifulSoup(response.html.html, "html.parser")
                     if page.find_all("a", class_="title"):
                         [properties.add(a["href"])
@@ -76,31 +85,40 @@ class Scraper():
             upsert=True)
         return x.raw_result
 
-    def _compare_dicts(self, new_dict, original_dict):
-        values_to_update = {}
-        for key, value in new_dict.items():
-            if original_dict.get(key) != value:
-                values_to_update[key] = value
-        return values_to_update
+    # https://stackoverflow.com/questions/3232943/update-value-of-a-nested-dictionary-of-varying-depth
+    def _update_dict(self, d, u):
+        for k, v in u.items():
+            if isinstance(v, collections.abc.Mapping):
+                d[k] = self._update_dict(d.get(k, {}), v)
+            else:
+                d[k] = v
+        return d
 
     def _backup_properties(self, backup_file, record_dict):
         doc_id = self._id_hash(record_dict["url"])
         if "/" in backup_file:
-            directory = backup_file.split("/")[0]+"/"
+            directory = backup_file.split("/")[0] + "/"
             if not os.path.exists(directory):
                 os.mkdir(directory)
+        if not os.path.isfile(backup_file):
+            open(backup_file, "w").close()  # Touch file if not exists
 
         with open(backup_file, "r+") as backup_file:
-            current_backup = json.loads(backup_file.read())
-            if current_backup[doc_id]:
-                updated_backup = self._compare_dicts(record_dict, current_backup[doc_id])
+            try:
+                current_backup = json.loads(backup_file.read())
+            except json.decoder.JSONDecodeError:
+                current_backup = dict()
+            doc_id = self._id_hash(record_dict["url"])
+            if doc_id in current_backup:
+                updated_backup = self._update_dict(current_backup, {doc_id: record_dict})
             else:
+                updated_backup = current_backup
                 updated_backup[doc_id] = record_dict
-                updated_backup[doc_id]["created_at_utc"] = datetime.now()
-            updated_backup[doc_id]["last_update_utc"] = datetime.now()
-            json.dump(updated_backup, backup_file)
-
-                
+                updated_backup[doc_id]["created_at_utc"] = str(datetime.utcnow())
+            updated_backup[doc_id]["last_update_utc"] = str(datetime.utcnow())
+            backup_file.seek(0)
+            backup_file.write(json.dumps(updated_backup))
+            backup_file.truncate()
 
     async def _fetch_data(self, prop, semaphore, timeout):
         async with semaphore:
@@ -139,7 +157,7 @@ class Scraper():
                     parser = Parser(page.html.html, page.html.url)
                     page = parser.property_dict
                 else:
-                    page = {"aktivni":False, "url": url}
+                    page = {"aktivni": False, "url": url}
                 try:
                     status = self._upsert_properties(propsColection, page)
                     logging.info(status)
@@ -147,7 +165,11 @@ class Scraper():
                     logging.info(f"Error has occurred: {timeout}")
                     self._backup_properties("backup/props_backup.json", page)
                     logging.info(f"Property added to backup file.")
-                    
+                except pymongo.errors.OperationFailure as error:
+                    logging.info(f"Error has occurred: {error}")
+                    self._backup_properties("backup/props_backup.json", page)
+                    logging.info(f"Property added to backup file.")
+
         # try:
         #     record = propsColection.insert_one(page_dict)
         #     print(f"ID of inserted record {record.inserted_id}")

@@ -7,3 +7,7 @@ services:
       dockerfile: ./docker/python/Dockerfile
     volumes:
       - ./:/usr/src/app
+    environment:
+      - MONGODB_RW_PASS=${MONGODB_RW_PASS}
+      # For printing output
+      - PYTHONUNBUFFERED=1

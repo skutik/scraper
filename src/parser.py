@@ -7,7 +7,7 @@ import unidecode
 from datetime import date
 
 class Parser:
-    def __init__(self, html, url, parser = "html.parser"):
+    def __init__(self, html, url, parser="html.parser"):
         self.page = BeautifulSoup(html, parser)
         self.page_url = url
 
@@ -16,8 +16,10 @@ class Parser:
         page = self.page
         item = dict()
         if page.find("div", {"ng-show":"showedEntity.detail"}):
+            logging.info(self.page_url)
             item["cena_text"] = page.find("span", {"class":"norm-price ng-binding"}).text
-            item["cena"] = int("".join([char for char in page.find("span", {"class":"norm-price ng-binding"}).text if char.isdigit()]))
+            price = "".join([char for char in page.find("span", {"class":"norm-price ng-binding"}).text if char.isdigit()])
+            item["cena"] = int(price) if price != "" else 0
             item["lokace"] = page.find("span", {"class":"location-text ng-binding"}).text
             item["url"] = self.page_url
             item["typ_smlouvy"] = self.page_url.split("/")[4] if self.page_url.count("/") > 4 else None
@@ -41,7 +43,9 @@ class Parser:
                             value = None
                     try:
                         item[label] = int(value)
-                    except ValueError:
+                    except Exception:
+                        item[label] = value
+                    except TypeError:
                         item[label] = value
             #Repalce accents with english letter, unicode values and replace spaces with underscores
             item = {unidecode.unidecode(key).lower().replace(" ","_"):(unicodedata.normalize("NFKD",value) if isinstance(value, str) else value) 
