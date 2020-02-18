@@ -15,90 +15,34 @@ from math import ceil
 import pyppeteer
 import concurrent.futures
 
-logging.getLogger().setLevel(logging.INFO)
+logging.getLogger().setLevel(logging.DEBUG)
 
-
-def get_property_pages(url, timeout=30, params=None, headers=None):
-    if headers is None:
-        headers = {}
-    if params is None:
-        params = {}
-    with requests_html.HTMLSession() as session:
-        response = session.get(url, params=params, headers=headers)
-        logging.info(response.url)
-        if response.status_code == 200:
-            response.html.render(timeout=timeout)
-            page = BeautifulSoup(response.html.html, "html.parser")
-            if not page.find("p", class_="status-text ng-binding"):
-                props_count = page.findAll("span", class_="numero ng-binding")
-                if props_count:
-                    try:
-                        props_count = int(props_count[-1:][0].text.replace(u"\xa0", ""))
-                        return ceil(props_count / 20)
-                    except TypeError:
-                        raise ("Value cannot be converted to string")
-                else:
-                    return 1
-            else:
-                return 0
-
-async def async_get_property_pages(url, timeout=30, params=None, headers=None):
-    if headers is None:
-        headers = {}
-    if params is None:
-        params = {}
-    if params is None:
-        params = {}
-    asession = requests_html.AsyncHTMLSession()
-    logging.info(f"Processing {url}")
-    page = None
-    url = url
-    response = await asession.get(url, params=params)
-    # try:
-    await response.html.arender(timeout=timeout)
-    page = BeautifulSoup(response.html.html, "html.parser")
-    await asession.close()
-    if not page.find("p", class_="status-text ng-binding"):
-        props_count = page.findAll("span", class_="numero ng-binding")
-        if props_count:
-            try:
-                props_count = int(props_count[-1:][0].text.replace(u"\xa0", ""))
-                return ceil(props_count / 20)
-            except TypeError:
-                raise ("Value cannot be converted to string")
+"""
+Test Queue
+"""
+async def _fetch_data(url, semaphore, page_type, timeout, queue):
+    async with semaphore:
+        url, page = _get_page(url=url, timeout=timeout)
+        if page:
+            pass
         else:
-            return 1
-    else:
-        return 0
+            queue.put()
 
+async def _generate_items_pages(url, timeout=30):
+    x = await _get_page(url, timeout)
+    logging.info(x)
+    return x
 
+async def _generate_items_pages_run(default_url, queue, params={}, timeout=30):
+    url, page = await _get_page(default_url, timeout, params)
+    if page:
+        parser = Parser(url=url, html=page.html.html)
+        [queue.put_nowait(url+f"strana={n}") for n in range(2, parser.get_total_properties_count() + 1)]
+        logging.info(f"Generated pages with items. Current count {queue.qsize()}")
+        [queue.put_nowait("https://www.sreality.cz"+f"{prop}") for prop in parser.get_properties_links()]
+        logging.info(f"Added {len(parser.get_properties_links())} links from first page. Current count {queue.qsize()}")
 
-def fetch_data(url, params=None):
-    if params is None:
-        params = {}
-    with requests_html.HTMLSession() as session:
-        logging.info(f"Processing {url}")
-        page = None
-        url = url
-        response = session.get(url, params=params)
-        logging.info(f"Response URL {response.url}")
-        # try:
-        logging.info("Start rendering")
-        response.html.render()
-        logging.info("End rendering")
-        page = response.html.html
-        url = response.html.url
-        logging.info("Rendering end successfully!")
-        # except pyppeteer.errors.TimeoutError as error:
-        #     print(error)
-        #     logging.info(f"During rendering {url} occurred error {error}")
-        # finally:
-        logging.info("Finally section!")
-        return url, page
-
-async def async_fetch_data(url, timeout=30, params=None):
-    if params is None:
-        params = {}
+async def _get_page(url, timeout=30, params={}):
     asession = requests_html.AsyncHTMLSession()
     logging.info(f"Processing {url}")
     page = None
@@ -106,48 +50,233 @@ async def async_fetch_data(url, timeout=30, params=None):
     response = await asession.get(url, params=params)
     # try:
     await response.html.arender(timeout=timeout)
-    page = response.html.html
-    url = response.html.url
+    page = response
+    url = page.url
+    logging.info(url)
     response.close()
     # except pyppeteer.errors.TimeoutError as error:
-    # print(error)
-    # logging.info(f"During rendering {prop} occurred error {error}")
+    # logging.info(f"During rendering {url} occurred error {error}")
     # finally:
     await asession.close()
     return url, page
 
-def process_list_pages(url, params=None):
-    if params is None:
-        params = {}
-    pages_count = get_property_pages(url, timeout=60, params=params)
-    logging.info(f"Pages count: {pages_count}")
-    # pages_to_parse = ["https://www.sreality.cz/hledani/pronajem/byty"for page_number in range(pages_count)]
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        # result = run_in_executor(executor, async_fetch_data, url, 30, params)
-        # logging.info(result)
-        # return result
-        # tasks = [loop.run_in_executor(executor, async_fetch_data, url, 60, {**params, **{"strana": page_number}}) for page_number in range(1, pages_count + 1)]
-        # logging.info(tasks)
-        # results = await loop.run_in_executor(executor, )
-        results = [executor.submit(fetch_data, url, params={**params, **{"strana": page_number}}) for page_number in
-                   range(1, pages_count + 1)]
+async def worker(id, queue):
+    while not queue.empty():
+        item = queue.get_nowait()
+        logging.info(f"Taks {id} processing {item}")
+        if isinstance(item, tuple):
+            url, page = await _get_page(item[0], params=item[1])
+        else:
+            url, page = await _get_page(item)
+        if page:
+            if "hledani" in url:
+                parser = Parser(page.html.html, url)
+                logging.info(f"Get URL: {url}")
+                if "strana=1" in url:
+                    [queue.put_nowait((url, {"velikost": ",".join(["1+1", "1+kk"]), "strana": n})) for n in range(2, parser.get_total_properties_count() + 1)]
+                links = parser.get_properties_links()
+                [queue.put_nowait("https://www.sreality.cz"+f"{link}") for link in links]
+                logging.info(links)
+                logging.info(f"{id} - Added {len(links)} to queue, total count {queue.qsize()}")
+            else:
+                parser = Parser(page.html.html, url)
+                prop = parser.property_dict
+                logging.info(f"{id} got property {prop}")
 
-        # results = await asyncio.gather(*tasks)
 
-        # return results
-        for result in concurrent.futures.as_completed(results):
-            logging.info(f"operation result {result.result()}")
+#
+def runner():
+    queue = asyncio.Queue()
+    logging.info("Start main!")
+    url, page = asyncio.run(_generate_items_pages("https://www.sreality.cz/hledani/prodej/byty/praha"))
+    _generate_items_pages_run("https://www.sreality.cz/hledani/pronajem/byty/praha-6?velikost=1%2B1,1%2Bkk", queue)
+
+    determine the first page
 
 
-# process_list_pages("https://www.sreality.cz/hledani/pronajem/byty/praha-5", {"velikost": "4+1"})
+    logging.info(f"Queue count of itmes: {queue.qsize()}")
 
-def main(url, params=None):
-    if params is None:
-        params = {}
+    links = ['/detail/pronajem/byt/1+kk/praha-brevnov-patockova/1664409180',
+                '/detail/pronajem/byt/1+kk/praha-brevnov-belohorska/2047069788',
+                '/detail/pronajem/byt/1+kk/praha-vokovice-k-lanu/1564528220',
+                '/detail/pronajem/byt/1+kk/praha-vokovice-kratky-lan/2988432988',
+                '/detail/pronajem/byt/1+kk/praha-repy-karlovarska/2819214940',
+                '/detail/pronajem/byt/1+1/praha-praha-6-na-petynce/3725053532',
+                '/detail/pronajem/byt/1+kk/praha-brevnov-patockova/134536796',
+                '/detail/pronajem/byt/1+kk/praha-brevnov-talichova/3073429084',
+                '/detail/pronajem/byt/1+kk/praha-ruzyne-kralupska/2457325148',
+                '/detail/pronajem/byt/1+kk/praha-dejvice-v-sareckem-udoli/2414464604',
+                '/detail/pronajem/byt/1+kk/praha-dejvice-koulova/3972255324',
+                '/detail/pronajem/byt/1+kk/praha-brevnov-slikova/3129003612',
+                '/detail/pronajem/byt/1+1/praha-dejvice-komornicka/1511509596',
+                '/detail/pronajem/byt/1+1/praha-praha-6-na-petynce/3830959708',
+                '/detail/pronajem/byt/1+1/praha-ruzyne-kralupska/607047260',
+                '/detail/pronajem/byt/1+kk/praha-ruzyne-kralupska/183357020',
+                '/detail/pronajem/byt/1+kk/praha-dejvice-zemedelska/550686300',
+                '/detail/pronajem/byt/1+kk/praha-vokovice-vokovicka/3907505756',
+                '/detail/pronajem/byt/1+kk/praha-dejvice-lindleyova/2362560092',
+                '/detail/pronajem/byt/1+1/praha-bubenec-ve-struhach/2085670492']
+
+    [queue.put_nowait("https://www.sreality.cz"+f"{link}")for link in links]
+
+    put default value
+    queue.put_nowait(("https://www.sreality.cz/hledani/pronajem/byty/praha-6", {"velikost": ",".join(["1+1", "1+kk"]),
+                                                                                "strana": 1}))
+
+    w = worker(queue)
+
+    asyncio.run(worker(queue))
+
     loop = asyncio.get_event_loop()
-    return loop.run_until_complete(process_list_pages(url, params))
+    logging.info("Started loop.")
+    loop.run_until_complete(_generate_items_pages_run("https://www.sreality.cz/hledani/pronajem/byty/praha-6", queue, {"velikost": ",".join(["1+1", "1+kk"]),
+                                                                                "strana": 1}))
+    loop.run_until_complete(asyncio.wait([worker(f"worker{n_worker}", queue) for n_worker in range(1, 4)]))
+    loop.close()
+    oop = asyncio.set_event_loop(asyncio.get_event_loop())
+    loop.run_until_complete(_generate_items_pages("https://www.sreality.cz/hledani/prodej/byty/praha"))
+    loop.close()
+    l
 
-print(process_list_pages("https://www.sreality.cz/hledani/pronajem/byty/praha-5", {"velikost": "4+1"}))
+runner()
+
+"""
+Test Asyncio vs Multiprocessing
+"""
+# def get_property_pages(url, timeout=30, params=None, headers=None):
+#     if headers is None:
+#         headers = {}
+#     if params is None:
+#         params = {}
+#     with requests_html.HTMLSession() as session:
+#         response = session.get(url, params=params, headers=headers)
+#         logging.info(response.url)
+#         if response.status_code == 200:
+#             response.html.render(timeout=timeout)
+#             page = BeautifulSoup(response.html.html, "html.parser")
+#             if not page.find("p", class_="status-text ng-binding"):
+#                 props_count = page.findAll("span", class_="numero ng-binding")
+#                 if props_count:
+#                     try:
+#                         props_count = int(props_count[-1:][0].text.replace(u"\xa0", ""))
+#                         return ceil(props_count / 20)
+#                     except TypeError:
+#                         raise ("Value cannot be converted to string")
+#                 else:
+#                     return 1
+#             else:
+#                 return 0
+#
+# async def async_get_property_pages(url, timeout=30, params=None, headers=None):
+#     if headers is None:
+#         headers = {}
+#     if params is None:
+#         params = {}
+#     if params is None:
+#         params = {}
+#     asession = requests_html.AsyncHTMLSession()
+#     logging.info(f"Processing {url}")
+#     page = None
+#     url = url
+#     response = await asession.get(url, params=params)
+#     # try:
+#     await response.html.arender(timeout=timeout)
+#     page = BeautifulSoup(response.html.html, "html.parser")
+#     await asession.close()
+#     if not page.find("p", class_="status-text ng-binding"):
+#         props_count = page.findAll("span", class_="numero ng-binding")
+#         if props_count:
+#             try:
+#                 props_count = int(props_count[-1:][0].text.replace(u"\xa0", ""))
+#                 return ceil(props_count / 20)
+#             except TypeError:
+#                 raise ("Value cannot be converted to string")
+#         else:
+#             return 1
+#     else:
+#         return 0
+#
+#
+#
+# def fetch_data(url, params=None):
+#     if params is None:
+#         params = {}
+#     with requests_html.HTMLSession() as session:
+#         logging.info(f"Processing {url}")
+#         page = None
+#         url = url
+#         response = session.get(url, params=params)
+#         logging.info(f"Response URL {response.url}")
+#         # try:
+#         logging.info("Start rendering")
+#         response.html.render()
+#         logging.info("End rendering")
+#         page = response.html.html
+#         url = response.html.url
+#         logging.info("Rendering end successfully!")
+#         # except pyppeteer.errors.TimeoutError as error:
+#         #     print(error)
+#         #     logging.info(f"During rendering {url} occurred error {error}")
+#         # finally:
+#         logging.info("Finally section!")
+#         return url, page
+#
+# async def async_fetch_data(url, timeout=30, params=None):
+#     if params is None:
+#         params = {}
+#     asession = requests_html.AsyncHTMLSession()
+#     logging.info(f"Processing {url}")
+#     page = None
+#     url = url
+#     response = await asession.get(url, params=params)
+#     # try:
+#     await response.html.arender(timeout=timeout)
+#     page = response.html.html
+#     url = response.html.url
+#     response.close()
+#     # except pyppeteer.errors.TimeoutError as error:
+#     # print(error)
+#     # logging.info(f"During rendering {prop} occurred error {error}")
+#     # finally:
+#     await asession.close()
+#     return url, page
+#
+# def process_list_pages(url, params=None):
+#     if params is None:
+#         params = {}
+#     pages_count = get_property_pages(url, timeout=60, params=params)
+#     logging.info(f"Pages count: {pages_count}")
+#     # pages_to_parse = ["https://www.sreality.cz/hledani/pronajem/byty"for page_number in range(pages_count)]
+#     with concurrent.futures.ProcessPoolExecutor() as executor:
+#         # result = run_in_executor(executor, async_fetch_data, url, 30, params)
+#         # logging.info(result)
+#         # return result
+#         # tasks = [loop.run_in_executor(executor, async_fetch_data, url, 60, {**params, **{"strana": page_number}}) for page_number in range(1, pages_count + 1)]
+#         # logging.info(tasks)
+#         # results = await loop.run_in_executor(executor, )
+#         results = [executor.submit(fetch_data, url, params={**params, **{"strana": page_number}}) for page_number in
+#                    range(1, pages_count + 1)]
+#
+#         # results = await asyncio.gather(*tasks)
+#
+#         # return results
+#         for result in concurrent.futures.as_completed(results):
+#             logging.info(f"operation result {result.result()}")
+#
+#
+# # process_list_pages("https://www.sreality.cz/hledani/pronajem/byty/praha-5", {"velikost": "4+1"})
+#
+# def main(url, params=None):
+#     if params is None:
+#         params = {}
+#     loop = asyncio.get_event_loop()
+#     return loop.run_until_complete(process_list_pages(url, params))
+#
+# print(process_list_pages("https://www.sreality.cz/hledani/pronajem/byty/praha-5", {"velikost": "4+1"}))
+
+"""
+Other tests
+"""
 
 # print(fetch_data("https://www.sreality.cz/hledani/pronajem/byty/praha-5?velikost=4%2B1&strana=2"))
 

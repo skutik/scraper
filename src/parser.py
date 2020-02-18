@@ -5,6 +5,7 @@ import unicodedata
 import re
 import unidecode
 from datetime import date
+from math import ceil
 
 class Parser:
     def __init__(self, html, url, parser="html.parser"):
@@ -57,3 +58,23 @@ class Parser:
             return item
         else:
             None
+
+    def get_total_properties_count(self):
+        if not self.page.find("p", class_="status-text ng-binding"):
+            props_count = self.page.findAll("span", class_="numero ng-binding")
+            if props_count:
+                try:
+                    props_count = int(props_count[-1:][0].text.replace(u"\xa0", ""))
+                    return ceil(props_count / 20)
+                except TypeError:
+                    raise ("Value cannot be converted to string")
+        else:
+            return 1
+
+    def get_properties_links(self):
+        links = set()
+        if self.page.find_all("a", class_="title"):
+            for link in self.page.find_all("a", class_="title"):
+                links.add(link["href"])
+        return links
+

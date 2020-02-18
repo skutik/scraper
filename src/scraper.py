@@ -21,8 +21,6 @@ class Scraper():
 
     MONGODB_CONN_STRING = f"mongodb+srv://rw_dave:{os.getenv('MONGODB_RW_PASS')}@cluster0-6lpd8.mongodb.net/test?retryWrites=true&w=majority"
 
-    queue = asyncio.Queue()
-
     def __init__(self, city=None, size=None, search_type="pronajem", property_type="byty", headers=HEADERS):
         if city:
             if isinstance(city, str):

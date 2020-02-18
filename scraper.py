@@ -3,7 +3,7 @@ import logging
 import requests_html
 from time import time
 import unicodedata
-from bs4 import BeautifulSoup
+from  bs4 import BeautifulSoup
 import re
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
