@@ -1,27 +1,27 @@
 import requests
 import logging
 from datetime import datetime as dt
+from math import ceil
 import json
+import asyncio
+import aiohttp
 logging.getLogger().setLevel(logging.DEBUG)
-
-logging.debug(dt.utcnow().timestamp())
-
-current_timestamp = int(dt.utcnow().timestamp()*1000)
 
 class ScraperV2():
 
     UNNEEDED_FILTERS = ["distance", "special_price_switch", "czk_price_summary_order2", "region", "estate_age", "floor_number", "usable_area", "estate_area"]
 
-    def __init__(self, category_main: int, category_type: int):
+    def __init__(self, category_main: int, category_type: int, per_page=100, semaphore_limit=5):
         self.filters = self.parse_filters(self.fetch_filtes())
         logging.debug(self.filters)
         if str(category_main) in self.filters["category_main_cb"].values():
             self.category_main = category_main
         if str(category_main) in self.filters["category_type_cb"].values():
             self.category_type = category_type
-
-
-
+        self.per_page = per_page
+        self.queue = asyncio.Queue()
+        self.semaphore = asyncio.Semaphore(semaphore_limit)
+        self.session = aiohttp.ClientSession()
 
     @property
     def _current_timestamp(self):
@@ -56,33 +56,76 @@ class ScraperV2():
                         filters[value_dict["key"]].update(self.find_values(value_dict["values"]))
         return filters
 
-    def parse_property_list(self, property_list_dict):
+    # def get_filters(self):
+    #     return self.parse_filters(categories_dict=self.fetch_filtes())
+
+    @staticmethod
+    def _parse_property_list(property_list_dict: dict):
+        return [estate["hash_id"] for estate in property_list_dict["_embedded"]["estates"]], property_list_dict.get("result_size", 0)
+
+    async def _fetch_property_list(self, session, page=None):
+        params = {"category_main_cb": self.category_main,
+                  "category_type_cb": self.category_type,
+                  "per_page": 100,
+                  "tms": self._current_timestamp}
+        if page:
+            params.update({"page": page})
+        async with session.get("https://www.sreality.cz/api/cs/v2/estates", params=params) as response:
+            logging.debug(f"Processing URL {response.url}")
+            if response.status == 200:
+                response_payload = await response.text()
+                return json.loads(response_payload), response.url
+            else:
+                raise Exception(f"{response.url} ended with status code {response.status}")
+
+    async def _fetch_estate(self, hash_id):
         pass
 
-    def _compose_list_url(self, url_type):
-        if url_type == 'list':
-            pass
-        elif url_type == 'property_detail':
-            pass
-        else:
-            raise(f"Unsupported type {url_type}")
+    async def _process_estates_list(self, page=None, generate_list_producers=False):
+        reposne_dict, _ = await self._fetch_property_list(self.session, page=page)
+        estates, result_size = self._parse_property_list(reposne_dict)
+        if generate_list_producers:
+            logging.debug(f"Result size {result_size}")
+            if result_size > self.per_page:
+                [await self.produce_estates_list(func=self._process_estates_list, page=page_number) for page_number in range(2, ceil(result_size/self.per_page))]
+        if estates:
+            logging.debug(f"Found estates: {estates}")
 
-    def fetch_properties(self, per_page=100):
-        response = requests.get("https://www.sreality.cz/api/cs/v2/estates",
-                                params={"category_main_cb": self.category_main,
-                                        "category_type_cb": self.category_type,
-                                        "per_page": per_page,
-                                        "tms": self._current_timestamp})
-        if response.status_code == 200:
-            response = json.loads(response.text)
-            total_resutls = response.get("result_size")
-            logging.debug(total_resutls)
-            for estate in response["_embedded"]["estates"]:
-                logging.debug(estate.get("hash_id"))
+    async def produce_estates_list(self, func, **kwargs):
+        logging.debug(f"{func} with kwargs {kwargs} adding to queue.")
+        await self.queue.put((func, kwargs,))
 
-    def
+    async def produce_estate(self, queue: asyncio.Queue, hash_id: list):
+        pass
+
+    # async def _fetch_properties(self):
+    #     property_dict, url  = self._fetch_property_list(self.session)
+    #     estates, result_size = self._parse_property_list(property_dict)
+    #     logging.debug(f"URL {url}, return {len(property_dict)}, result size is {result_size}")
+    #     if result_size > self.per_page:
 
 
+    async def _process_queue_item(self, item: tuple):
+        logging.debug(f"Item {item} has been processed.")
+        fnc, kwargs = item[0], item[1]
+        await fnc(**kwargs)
+
+    async def _consumer(self):
+            while not self.queue.empty():
+                async with self.semaphore:
+                    item = await self.queue.get()
+                    logging.debug(f"Got item {item}")
+                    await self._process_queue_item(item)
+
+    async def _worker(self):
+        await self.produce_estates_list(func=self._process_estates_list, generate_list_producers=True)
+        await self._consumer()
+        await self.session.close()
+
+    def runner(self):
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self._worker())
+        loop.close()
 
 
 # response = requests.get(f"https://www.sreality.cz/api/cs/v2/estates?category_main_cb=1&category_sub_cb=2%7C3%7C7&category_type_cb=1&locality_region_id=10&page=3&per_page=20&tms={current_timestamp}")
@@ -90,4 +133,4 @@ class ScraperV2():
 # logging.debug(json.dumps(json.loads(response.content), indent=4))
 
 s = ScraperV2(category_main=1, category_type=2)
-s.fetch_properties()
+s.runner()

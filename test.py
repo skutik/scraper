@@ -18,6 +18,24 @@ import concurrent.futures
 logging.getLogger().setLevel(logging.DEBUG)
 
 """
+Test kwargs
+"""
+def test(a, **kwargs):
+    print(a)
+    if len(kwargs):
+        for k,v in kwargs.items():
+         print(f"{k}: {v}")
+
+def sum_num(a, b, c):
+    return a + b +c
+
+def test2(func, **kwargs):
+    logging.debug(kwargs)
+    return func(**kwargs)
+
+print(test2(sum_num, a=1, b=2, c=3))
+
+"""
 Test Queue
 """
 async def _fetch_data(url, semaphore, page_type, timeout, queue):
@@ -91,7 +109,7 @@ def runner():
     url, page = asyncio.run(_generate_items_pages("https://www.sreality.cz/hledani/prodej/byty/praha"))
     _generate_items_pages_run("https://www.sreality.cz/hledani/pronajem/byty/praha-6?velikost=1%2B1,1%2Bkk", queue)
 
-    determine the first page
+    # determine the first page
 
 
     logging.info(f"Queue count of itmes: {queue.qsize()}")
@@ -119,7 +137,7 @@ def runner():
 
     [queue.put_nowait("https://www.sreality.cz"+f"{link}")for link in links]
 
-    put default value
+    # put default value
     queue.put_nowait(("https://www.sreality.cz/hledani/pronajem/byty/praha-6", {"velikost": ",".join(["1+1", "1+kk"]),
                                                                                 "strana": 1}))
 
@@ -136,9 +154,8 @@ def runner():
     oop = asyncio.set_event_loop(asyncio.get_event_loop())
     loop.run_until_complete(_generate_items_pages("https://www.sreality.cz/hledani/prodej/byty/praha"))
     loop.close()
-    l
 
-runner()
+# runner()
 
 """
 Test Asyncio vs Multiprocessing
