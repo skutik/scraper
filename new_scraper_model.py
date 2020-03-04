@@ -9,9 +9,9 @@ logging.getLogger().setLevel(logging.DEBUG)
 
 class ScraperV2():
 
-    UNNEEDED_FILTERS = ["distance", "special_price_switch", "czk_price_summary_order2", "region", "estate_age", "floor_number", "usable_area", "estate_area"]
+    FILTERS_TO_IGNORE = ["distance", "special_price_switch", "czk_price_summary_order2", "region", "estate_age", "floor_number", "usable_area", "estate_area"]
 
-    def __init__(self, category_main: int, category_type: int, per_page=100, semaphore_limit=5):
+    def __init__(self, category_main: int, category_type: int, category_sub=None, location_id=None, per_page=100, semaphore_limit=5):
         self.filters = self.parse_filters(self.fetch_filtes())
         logging.debug(self.filters)
         if str(category_main) in self.filters["category_main_cb"].values():
@@ -22,6 +22,8 @@ class ScraperV2():
         self.queue = asyncio.Queue()
         self.semaphore = asyncio.Semaphore(semaphore_limit)
         self.session = aiohttp.ClientSession()
+        self.category_sub = category_sub
+        self.location_id = location_id
 
     @property
     def _current_timestamp(self):
@@ -44,7 +46,7 @@ class ScraperV2():
     def parse_filters(self, categories_dict=dict):
         filters = dict()
         for filter_category, values in categories_dict.get("linked_filters",{}).items():
-            if filter_category not in self.UNNEEDED_FILTERS:
+            if filter_category not in self.FILTERS_TO_IGNORE:
                 filters[filter_category] = {}
                 filters[filter_category].update(self.find_values(values.get("values", [])))
         for item in categories_dict.get("filters", {}).values():
@@ -63,23 +65,54 @@ class ScraperV2():
     def _parse_property_list(property_list_dict: dict):
         return [estate["hash_id"] for estate in property_list_dict["_embedded"]["estates"]], property_list_dict.get("result_size", 0)
 
+    @staticmethod
+    def _parse_estate(property_dict: dict):
+        property = {
+            "lon": property_dict["map"].get("lon", 0),
+            "lat": property_dict["map"].get("lat", 0),
+            "price_czk": property_dict["price_czk"].get("value_raw", 0),
+            "price_czk_unit": property_dict["price_czk"].get("unit", ""),
+            "category_main_cb": property_dict["seo"]["category_main_cb"],
+            "category_sub_cb": property_dict["seo"]["category_sub_cb"],
+            "category_type_cb": property_dict["seo"]["category_type_cb"],
+            "locality": property_dict["seo"]["locality"]
+        }
+        logging.debug(property)
+        return property
+
     async def _fetch_property_list(self, session, page=None):
         params = {"category_main_cb": self.category_main,
                   "category_type_cb": self.category_type,
-                  "per_page": 100,
+                  "per_page": self.per_page,
                   "tms": self._current_timestamp}
         if page:
             params.update({"page": page})
-        async with session.get("https://www.sreality.cz/api/cs/v2/estates", params=params) as response:
+        if self.location_id:
+            params.update({"locality_region_id": self.location_id})
+        if self.category_sub:
+            params.update({"category_sub_cb": self.category_sub})
+        async with self.session.get("https://www.sreality.cz/api/cs/v2/estates", params=params) as response:
             logging.debug(f"Processing URL {response.url}")
             if response.status == 200:
                 response_payload = await response.text()
-                return json.loads(response_payload), response.url
+                return json.loads(response_payload, encoding="utf-8"), response.url
             else:
                 raise Exception(f"{response.url} ended with status code {response.status}")
 
     async def _fetch_estate(self, hash_id):
-        pass
+        params = {"tms": self._current_timestamp}
+        async with self.session.get("https://www.sreality.cz/api/cs/v2/estates/" + str(hash_id), params=params) as response:
+            logging.debug(f"Processing URL {response.url}")
+            if response.status == 200:
+                response_payload = await response.text()
+                return json.loads(response_payload, encoding="utf-8"), response.url
+            else:
+                raise Exception(f"{response.url} ended with status code {response.status}")
+
+    async def _process_estate(self, hash_id):
+        response_dict, _ = await self._fetch_estate(hash_id)
+        self._parse_estate(response_dict)
+
 
     async def _process_estates_list(self, page=None, generate_list_producers=False):
         reposne_dict, _ = await self._fetch_property_list(self.session, page=page)
@@ -89,21 +122,16 @@ class ScraperV2():
             if result_size > self.per_page:
                 [await self.produce_estates_list(func=self._process_estates_list, page=page_number) for page_number in range(2, ceil(result_size/self.per_page))]
         if estates:
-            logging.debug(f"Found estates: {estates}")
+            for estate in estates:
+                await self.produce_estate(func=self._process_estate, hash_id=estate)
 
     async def produce_estates_list(self, func, **kwargs):
         logging.debug(f"{func} with kwargs {kwargs} adding to queue.")
         await self.queue.put((func, kwargs,))
 
-    async def produce_estate(self, queue: asyncio.Queue, hash_id: list):
-        pass
-
-    # async def _fetch_properties(self):
-    #     property_dict, url  = self._fetch_property_list(self.session)
-    #     estates, result_size = self._parse_property_list(property_dict)
-    #     logging.debug(f"URL {url}, return {len(property_dict)}, result size is {result_size}")
-    #     if result_size > self.per_page:
-
+    async def produce_estate(self, func, **kwargs):
+        logging.debug(f"{func} with hash id {kwargs}")
+        await self.queue.put((func, kwargs))
 
     async def _process_queue_item(self, item: tuple):
         logging.debug(f"Item {item} has been processed.")
@@ -111,11 +139,12 @@ class ScraperV2():
         await fnc(**kwargs)
 
     async def _consumer(self):
-            while not self.queue.empty():
-                async with self.semaphore:
-                    item = await self.queue.get()
-                    logging.debug(f"Got item {item}")
-                    await self._process_queue_item(item)
+        while not self.queue.empty():
+            item = await self.queue.get()
+            logging.debug(f"Got item {item}")
+            await self._process_queue_item(item)
+            await asyncio.sleep(2)
+            logging.debug(f"Processing of item {item} has finished.")
 
     async def _worker(self):
         await self.produce_estates_list(func=self._process_estates_list, generate_list_producers=True)
@@ -132,5 +161,5 @@ class ScraperV2():
 # response = requests.get(f"https://www.sreality.cz/api/en/v2/estates/3252305500?tms={current_timestamp}")
 # logging.debug(json.dumps(json.loads(response.content), indent=4))
 
-s = ScraperV2(category_main=1, category_type=2)
+s = ScraperV2(category_main=1, category_type=2, category_sub=47, location_id=12, semaphore_limit=3)
 s.runner()

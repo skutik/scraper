@@ -1,5 +1,6 @@
 import asyncio
 import json
+import requests
 import collections.abc
 import requests_html
 import logging
@@ -14,8 +15,16 @@ from multiprocessing import Manager
 from math import ceil
 import pyppeteer
 import concurrent.futures
+from datetime import datetime as dt
 
 logging.getLogger().setLevel(logging.DEBUG)
+
+"""
+Test estate response
+"""
+
+r = requests.get(f"https://www.sreality.cz/api/cs/v2/estates/3598241372?tms={int(dt.utcnow().timestamp()*1000)}")
+logging.debug(json.loads(r.text, encoding="utf-8"))
 
 """
 Test kwargs
@@ -151,7 +160,7 @@ def runner():
                                                                                 "strana": 1}))
     loop.run_until_complete(asyncio.wait([worker(f"worker{n_worker}", queue) for n_worker in range(1, 4)]))
     loop.close()
-    oop = asyncio.set_event_loop(asyncio.get_event_loop())
+    loop = asyncio.set_event_loop(asyncio.get_event_loop())
     loop.run_until_complete(_generate_items_pages("https://www.sreality.cz/hledani/prodej/byty/praha"))
     loop.close()
 
