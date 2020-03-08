@@ -132,7 +132,7 @@ class Scraper():
             except pyppeteer.errors.TimeoutError as error:
                 print(error)
                 logging.info(f"During rendering {prop} occurred error {error}")
-            finally:
+               finally:
                 await asession.close()
                 return url, page
 
