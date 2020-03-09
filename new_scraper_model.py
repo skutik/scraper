@@ -7,11 +7,36 @@ import asyncio
 import aiohttp
 logging.getLogger().setLevel(logging.DEBUG)
 
-class ScraperV2():
+class Scraper():
 
     FILTERS_TO_IGNORE = ["distance", "special_price_switch", "czk_price_summary_order2", "region", "estate_age", "floor_number", "usable_area", "estate_area"]
+    PROPERTY_ATTRIBUTES_MAP = {
+        "Celková cena": "Total price",
+        "ID zakázky": "Order ID",
+        "Aktualizace": "Update",
+        "Stavba": "Building",
+        "Stav objektu": "Property status",
+        "Vlastnictví": "Ownership",
+        "Podlaží": "Floor",
+        "Užitná plocha": "Usable area",
+        "Plocha podlahová": "Floorage",
+        "Balkón": "Balcony",
+        "Energetická náročnost budovy": "Energy Performance Rating",
+        "Vybavení": "Furnished",
+        "Náklady na bydlení": "Cost of living",
+        "Plyn": "Gas",
+        "Odpad": "Waste",
+        "Telekomunikace": "Telecommunications",
+        "Elektřina": "Electricity",
+        "Doprava": "Transportation",
+        "Komunikace": "Road",
+        "Topení": "Heating",
+        "Voda": "Water",
+        "Datum nastěhování": "Move-in date",
+        "Parkování": "Parking"
+    }
 
-    def __init__(self, category_main: int, category_type: int, category_sub=None, location_id=None, per_page=100, max_workers=5, semaphore_limit=5):
+    def __init__(self, category_main: int, category_type: int, category_sub=None, location_id=None, per_page=100, max_workers=5):
         self.filters = self.parse_filters(self.fetch_filtes())
         logging.debug(self.filters)
         if str(category_main) in self.filters["category_main_cb"].values():
@@ -63,7 +88,9 @@ class ScraperV2():
         return [estate["hash_id"] for estate in property_list_dict["_embedded"]["estates"]], property_list_dict.get("result_size", 0)
 
     @staticmethod
-    def _parse_estate(property_dict: dict):
+    def _parse_estate(property_dict: dict, map_dict = None):
+        if not map_dict:
+            map_dict = dict()
         property = {
             "lon": property_dict["map"].get("lon", 0),
             "lat": property_dict["map"].get("lat", 0),
@@ -72,8 +99,31 @@ class ScraperV2():
             "category_main_cb": property_dict["seo"]["category_main_cb"],
             "category_sub_cb": property_dict["seo"]["category_sub_cb"],
             "category_type_cb": property_dict["seo"]["category_type_cb"],
-            "locality": property_dict["seo"]["locality"]
+            "seo_locality": property_dict["seo"]["locality"],
+            "locality": property_dict["locality"]["value"],
         }
+        if property_dict.get("contact"):
+            property["phone"] = [f"+{phone.get('code')}{phone.get('number')}" for phone in property_dict["contact"]["phones"]],
+            property["email"] = property_dict["contact"].get("email")
+            property["seller_name"] = property_dict["contact"].get("user_name")
+        else:
+            property["seller_id"] = property_dict["_embedded"]["seller"]["user_id"]
+            property["phone"] = [f"+{phone.get('code')}{phone.get('number')}" for phone in property_dict["_embedded"]["seller"]["phones"]]
+            property["seller_name"] = property_dict["_embedded"].get("user_name")
+            property["email"] = property_dict["_embedded"].get("email")
+        for item in property_dict["items"]:
+            name = map_dict.get(item["name"], item["name"])
+            if isinstance(item["value"], list):
+                property[name] = [value["value"] for value in item["value"]]
+            else:
+                property[name] = item["value"]
+            if item.get("currency"):
+                property[f"{name}_currency"] = item["currency"]
+            if item.get("unit"):
+                property[f"{name}_unit"] = item["unit"]
+            if item.get("notes"):
+                property[f"{name}_notes"] = [note for note in item["notes"]]
+
         logging.debug(property)
         return property
 
@@ -105,12 +155,13 @@ class ScraperV2():
                 return json.loads(response_payload, encoding="utf-8"), response.url
             elif response.status == 410:
                 logging.debug(f"Estate with id {hash_id} no longer exists.")
+                return None, response.url
             else:
                 raise Exception(f"{response.url} ended with status code {response.status}")
 
     async def _process_estate(self, hash_id):
         response_dict, _ = await self._fetch_estate(hash_id)
-        self._parse_estate(response_dict)
+        self._parse_estate(response_dict, self.PROPERTY_ATTRIBUTES_MAP)
 
     async def _process_estates_list(self, page=None, generate_list_producers=False):
         reposne_dict, _ = await self._fetch_property_list(page=page)
@@ -157,5 +208,5 @@ class ScraperV2():
 # logging.debug(json.dumps(json.loads(response.content), indent=4))
 
 # s = ScraperV2(category_main=1, category_type=2)
-s = ScraperV2(category_main=1, category_type=2, category_sub=47)
+s = Scraper(category_main=1, category_type=2, category_sub=47, max_workers=10)
 s.runner()
