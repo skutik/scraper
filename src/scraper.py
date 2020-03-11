@@ -37,13 +37,22 @@ class Scraper():
         "Datum nastěhování": "Move-in date",
         "Parkování": "Parking"
     }
+    URL_MAP = {
+        "Prodej": "prodej",
+        "Pronájem": "pronajem",
+        "Dražby": "drazby",
+        "6 a více": "6-a-vice",
+        "Byty": "byt",
+        "Domy": "dum",
+        "Pozemky": "pozemek"
+    }
 
     def __init__(self, category_main: int, category_type: int, mongo_database: str, mongo_collection: str, category_sub=None, location_id=None, per_page=100, max_workers=5):
-        self.filters = self.parse_filters(self.fetch_filtes())
+        self.filters = self._parse_filters(self._fetch_filtes())
         logging.debug(self.filters)
         if str(category_main) in self.filters["category_main_cb"].values():
             self.category_main = category_main
-        if str(category_main) in self.filters["category_type_cb"].values():
+        if str(category_type) in self.filters["category_type_cb"].values():
             self.category_type = category_type
         self.per_page = per_page
         self.queue = asyncio.Queue()
@@ -57,41 +66,50 @@ class Scraper():
     def _current_timestamp(self):
         return int(dt.utcnow().timestamp()*1000)
 
-    def fetch_filtes(self):
+    def _fetch_filtes(self):
         response = requests.get(f"https://www.sreality.cz/api/cz/v2/filters?tms={self._current_timestamp}")
         if response.status_code == 200:
             return json.loads(response.text, encoding="utf-8")
 
-    def find_values(self, values_list):
+    def _find_values(self, values_list):
         output_dict = {}
         for filter_dict in values_list:
             if filter_dict.get("values", []):
-                output_dict.update(self.find_values(filter_dict["values"]))
+                output_dict.update(self._find_values(filter_dict["values"]))
             elif filter_dict.get("value", ""):
                 output_dict[filter_dict["name"]] = filter_dict.get("value")
         return output_dict
 
-    def parse_filters(self, categories_dict=dict):
+    def _parse_filters(self, categories_dict=dict):
         filters = dict()
         for filter_category, values in categories_dict.get("linked_filters",{}).items():
             if filter_category not in self.FILTERS_TO_IGNORE:
                 filters[filter_category] = {}
-                filters[filter_category].update(self.find_values(values.get("values", [])))
+                filters[filter_category].update(self._find_values(values.get("values", [])))
         for item in categories_dict.get("filters", {}).values():
             for values in item.values():
                 for value_dict in values:
                     if value_dict.get("values"):
                         if not filters.get(value_dict["key"]):
                             filters[value_dict["key"]] = {}
-                        filters[value_dict["key"]].update(self.find_values(value_dict["values"]))
+                        filters[value_dict["key"]].update(self._find_values(value_dict["values"]))
         return filters
 
     @staticmethod
     def _parse_property_list(property_list_dict: dict):
         return [estate["hash_id"] for estate in property_list_dict["_embedded"]["estates"]], property_list_dict.get("result_size", 0)
 
+    def _generate_estate_url(self, filters_dict, seo_dict, values_map, hash_id):
+        # logging.debug(filters_dict.get("category_main_cb"))
+        # logging.debug([key for key, value in filters_dict.get("category_main_cb").items() if int(value) == seo_dict.get("category_main_cb")])
+        cat_main = [key for key, value in filters_dict.get("category_main_cb").items() if value == str(seo_dict.get("category_main_cb"))][0]
+        cat_sub = [key for key, value in filters_dict.get("category_sub_cb").items() if value == str(seo_dict.get("category_sub_cb"))][0]
+        cat_type = [key for key, value in filters_dict.get("category_type_cb").items() if value == str(seo_dict.get("category_type_cb"))][0]
+
+        return f"https://www.sreality.cz/detail/{values_map.get(cat_type, cat_type)}/{values_map.get(cat_main, cat_main)}/{values_map.get(cat_sub, cat_sub).lower()}/{seo_dict.get('locality')}/{hash_id}"
+
     @staticmethod
-    def _parse_estate(property_dict: dict, map_dict = None):
+    def _parse_estate(property_dict: dict, map_dict=None):
         if not map_dict:
             map_dict = dict()
         property = {
@@ -104,7 +122,8 @@ class Scraper():
             "category_sub_cb": property_dict["seo"]["category_sub_cb"],
             "category_type_cb": property_dict["seo"]["category_type_cb"],
             "seo_locality": property_dict["seo"]["locality"],
-            "locality": property_dict["locality"]["value"],
+            "seo_params": property_dict["seo"],
+            "locality": property_dict["locality"]["value"]
         }
         if property_dict.get("contact"):
             property["phone"] = [f"+{phone.get('code')}{phone.get('number')}" for phone in property_dict["contact"]["phones"]],
@@ -115,6 +134,7 @@ class Scraper():
             property["phone"] = [f"+{phone.get('code')}{phone.get('number')}" for phone in property_dict["_embedded"]["seller"]["phones"]]
             property["seller_name"] = property_dict["_embedded"].get("user_name")
             property["email"] = property_dict["_embedded"].get("email")
+
         for item in property_dict["items"]:
             name = map_dict.get(item["name"], item["name"])
             if isinstance(item["value"], list):
@@ -164,9 +184,12 @@ class Scraper():
 
     async def _process_estate(self, hash_id):
         response_dict, _ = await self._fetch_estate(hash_id)
-        estate_dict = self._parse_estate(response_dict, self.PROPERTY_ATTRIBUTES_MAP) if response_dict else {"id": hash_id, "available": False}
-        response = await self.mongo_client.upsert_property(hash_id, estate_dict)
-        logging.debug(response)
+        estate_dict = self._parse_estate(response_dict, self.PROPERTY_ATTRIBUTES_MAP) if response_dict else {"available": False}
+        if estate_dict.get("seo_params"):
+            estate_dict["estate_url"] = self._generate_estate_url(self.filters, estate_dict["seo_params"], self.URL_MAP, hash_id)
+            logging.debug(estate_dict["estate_url"])
+        # response = await self.mongo_client.upsert_property(hash_id, estate_dict)
+        # logging.debug(response)
 
     async def _process_estates_list(self, page=None, generate_list_producers=False):
         reposne_dict, _ = await self._fetch_property_list(page=page)
@@ -175,12 +198,12 @@ class Scraper():
         if generate_list_producers:
             logging.debug(f"Result size {result_size}")
             if result_size > self.per_page:
-                [await self.produce_estates_list(func=self._process_estates_list, page=page_number) for page_number in range(2, (ceil(result_size/self.per_page)) + 1)]
+                [await self._produce_estates_list(func=self._process_estates_list, page=page_number) for page_number in range(2, (ceil(result_size/self.per_page)) + 1)]
         if estates:
             for estate in estates:
                 await self.produce_estate(func=self._process_estate, hash_id=estate)
 
-    async def produce_estates_list(self, func, **kwargs):
+    async def _produce_estates_list(self, func, **kwargs):
         logging.debug(f"{func} with kwargs {kwargs} adding to queue.")
         await self.queue.put((func, kwargs,))
 
@@ -210,4 +233,5 @@ class Scraper():
 
 # s = ScraperV2(category_main=1, category_type=2)
 s = Scraper(category_main=1, category_type=2, category_sub=47, max_workers=5, mongo_database="test_db", mongo_collection="props")
+# print(s._fetch_filtes())
 s.runner()
