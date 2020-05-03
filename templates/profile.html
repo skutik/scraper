@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" type="text/css" href=./style.css"> <title>Profle page</title>
+</head>
+
+<body>
+    <div class="topnav">
+        <a href="/">Home</a>
+    </div>
+    <h1>Profile of user: {{ user_name }}</h1>
+    <form action="/update_preferences" method="POST">
+        <p>
+            {% for filter in main_category %}
+            {% if filter[1] in preferences %}
+            <input type="checkbox" id="{{ filter[1] }}" name="category_main_cb" value="{{ filter[0] }}" checked>
+            {% else %}
+            <input type="checkbox" id="{{ filter[1] }}" name="category_main_cb" value="{{ filter[0] }}">
+            {% endif %}
+            <label for="{{ filter[1] }}">{{ filter[0] }}</label><br>
+            {% endfor %}
+        </p>
+        <button type="submit" value="Save">Save</button>
+    </form>
+    <form action="/logout" method="POST">
+        <button type="submit" value="Logout">Logout</button>
+    </form>
+</body>
+
+</html>

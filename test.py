@@ -23,30 +23,39 @@ logging.getLogger().setLevel(logging.DEBUG)
 Test estate response
 """
 
-r = requests.get(f"https://www.sreality.cz/api/cs/v2/estates/3598241372?tms={int(dt.utcnow().timestamp()*1000)}")
+r = requests.get(
+    f"https://www.sreality.cz/api/cs/v2/estates/3598241372?tms={int(dt.utcnow().timestamp()*1000)}"
+)
 logging.debug(json.loads(r.text, encoding="utf-8"))
 
 """
 Test kwargs
 """
+
+
 def test(a, **kwargs):
     print(a)
     if len(kwargs):
-        for k,v in kwargs.items():
-         print(f"{k}: {v}")
+        for k, v in kwargs.items():
+            print(f"{k}: {v}")
+
 
 def sum_num(a, b, c):
-    return a + b +c
+    return a + b + c
+
 
 def test2(func, **kwargs):
     logging.debug(kwargs)
     return func(**kwargs)
+
 
 print(test2(sum_num, a=1, b=2, c=3))
 
 """
 Test Queue
 """
+
+
 async def _fetch_data(url, semaphore, page_type, timeout, queue):
     async with semaphore:
         url, page = _get_page(url=url, timeout=timeout)
@@ -55,19 +64,30 @@ async def _fetch_data(url, semaphore, page_type, timeout, queue):
         else:
             queue.put()
 
+
 async def _generate_items_pages(url, timeout=30):
     x = await _get_page(url, timeout)
     logging.info(x)
     return x
 
+
 async def _generate_items_pages_run(default_url, queue, params={}, timeout=30):
     url, page = await _get_page(default_url, timeout, params)
     if page:
         parser = Parser(url=url, html=page.html.html)
-        [queue.put_nowait(url+f"strana={n}") for n in range(2, parser.get_total_properties_count() + 1)]
+        [
+            queue.put_nowait(url + f"strana={n}")
+            for n in range(2, parser.get_total_properties_count() + 1)
+        ]
         logging.info(f"Generated pages with items. Current count {queue.qsize()}")
-        [queue.put_nowait("https://www.sreality.cz"+f"{prop}") for prop in parser.get_properties_links()]
-        logging.info(f"Added {len(parser.get_properties_links())} links from first page. Current count {queue.qsize()}")
+        [
+            queue.put_nowait("https://www.sreality.cz" + f"{prop}")
+            for prop in parser.get_properties_links()
+        ]
+        logging.info(
+            f"Added {len(parser.get_properties_links())} links from first page. Current count {queue.qsize()}"
+        )
+
 
 async def _get_page(url, timeout=30, params={}):
     asession = requests_html.AsyncHTMLSession()
@@ -87,6 +107,7 @@ async def _get_page(url, timeout=30, params={}):
     await asession.close()
     return url, page
 
+
 async def worker(id, queue):
     while not queue.empty():
         item = queue.get_nowait()
@@ -100,11 +121,21 @@ async def worker(id, queue):
                 parser = Parser(page.html.html, url)
                 logging.info(f"Get URL: {url}")
                 if "strana=1" in url:
-                    [queue.put_nowait((url, {"velikost": ",".join(["1+1", "1+kk"]), "strana": n})) for n in range(2, parser.get_total_properties_count() + 1)]
+                    [
+                        queue.put_nowait(
+                            (url, {"velikost": ",".join(["1+1", "1+kk"]), "strana": n})
+                        )
+                        for n in range(2, parser.get_total_properties_count() + 1)
+                    ]
                 links = parser.get_properties_links()
-                [queue.put_nowait("https://www.sreality.cz"+f"{link}") for link in links]
+                [
+                    queue.put_nowait("https://www.sreality.cz" + f"{link}")
+                    for link in links
+                ]
                 logging.info(links)
-                logging.info(f"{id} - Added {len(links)} to queue, total count {queue.qsize()}")
+                logging.info(
+                    f"{id} - Added {len(links)} to queue, total count {queue.qsize()}"
+                )
             else:
                 parser = Parser(page.html.html, url)
                 prop = parser.property_dict
@@ -115,40 +146,50 @@ async def worker(id, queue):
 def runner():
     queue = asyncio.Queue()
     logging.info("Start main!")
-    url, page = asyncio.run(_generate_items_pages("https://www.sreality.cz/hledani/prodej/byty/praha"))
-    _generate_items_pages_run("https://www.sreality.cz/hledani/pronajem/byty/praha-6?velikost=1%2B1,1%2Bkk", queue)
+    url, page = asyncio.run(
+        _generate_items_pages("https://www.sreality.cz/hledani/prodej/byty/praha")
+    )
+    _generate_items_pages_run(
+        "https://www.sreality.cz/hledani/pronajem/byty/praha-6?velikost=1%2B1,1%2Bkk",
+        queue,
+    )
 
     # determine the first page
 
-
     logging.info(f"Queue count of itmes: {queue.qsize()}")
 
-    links = ['/detail/pronajem/byt/1+kk/praha-brevnov-patockova/1664409180',
-                '/detail/pronajem/byt/1+kk/praha-brevnov-belohorska/2047069788',
-                '/detail/pronajem/byt/1+kk/praha-vokovice-k-lanu/1564528220',
-                '/detail/pronajem/byt/1+kk/praha-vokovice-kratky-lan/2988432988',
-                '/detail/pronajem/byt/1+kk/praha-repy-karlovarska/2819214940',
-                '/detail/pronajem/byt/1+1/praha-praha-6-na-petynce/3725053532',
-                '/detail/pronajem/byt/1+kk/praha-brevnov-patockova/134536796',
-                '/detail/pronajem/byt/1+kk/praha-brevnov-talichova/3073429084',
-                '/detail/pronajem/byt/1+kk/praha-ruzyne-kralupska/2457325148',
-                '/detail/pronajem/byt/1+kk/praha-dejvice-v-sareckem-udoli/2414464604',
-                '/detail/pronajem/byt/1+kk/praha-dejvice-koulova/3972255324',
-                '/detail/pronajem/byt/1+kk/praha-brevnov-slikova/3129003612',
-                '/detail/pronajem/byt/1+1/praha-dejvice-komornicka/1511509596',
-                '/detail/pronajem/byt/1+1/praha-praha-6-na-petynce/3830959708',
-                '/detail/pronajem/byt/1+1/praha-ruzyne-kralupska/607047260',
-                '/detail/pronajem/byt/1+kk/praha-ruzyne-kralupska/183357020',
-                '/detail/pronajem/byt/1+kk/praha-dejvice-zemedelska/550686300',
-                '/detail/pronajem/byt/1+kk/praha-vokovice-vokovicka/3907505756',
-                '/detail/pronajem/byt/1+kk/praha-dejvice-lindleyova/2362560092',
-                '/detail/pronajem/byt/1+1/praha-bubenec-ve-struhach/2085670492']
+    links = [
+        "/detail/pronajem/byt/1+kk/praha-brevnov-patockova/1664409180",
+        "/detail/pronajem/byt/1+kk/praha-brevnov-belohorska/2047069788",
+        "/detail/pronajem/byt/1+kk/praha-vokovice-k-lanu/1564528220",
+        "/detail/pronajem/byt/1+kk/praha-vokovice-kratky-lan/2988432988",
+        "/detail/pronajem/byt/1+kk/praha-repy-karlovarska/2819214940",
+        "/detail/pronajem/byt/1+1/praha-praha-6-na-petynce/3725053532",
+        "/detail/pronajem/byt/1+kk/praha-brevnov-patockova/134536796",
+        "/detail/pronajem/byt/1+kk/praha-brevnov-talichova/3073429084",
+        "/detail/pronajem/byt/1+kk/praha-ruzyne-kralupska/2457325148",
+        "/detail/pronajem/byt/1+kk/praha-dejvice-v-sareckem-udoli/2414464604",
+        "/detail/pronajem/byt/1+kk/praha-dejvice-koulova/3972255324",
+        "/detail/pronajem/byt/1+kk/praha-brevnov-slikova/3129003612",
+        "/detail/pronajem/byt/1+1/praha-dejvice-komornicka/1511509596",
+        "/detail/pronajem/byt/1+1/praha-praha-6-na-petynce/3830959708",
+        "/detail/pronajem/byt/1+1/praha-ruzyne-kralupska/607047260",
+        "/detail/pronajem/byt/1+kk/praha-ruzyne-kralupska/183357020",
+        "/detail/pronajem/byt/1+kk/praha-dejvice-zemedelska/550686300",
+        "/detail/pronajem/byt/1+kk/praha-vokovice-vokovicka/3907505756",
+        "/detail/pronajem/byt/1+kk/praha-dejvice-lindleyova/2362560092",
+        "/detail/pronajem/byt/1+1/praha-bubenec-ve-struhach/2085670492",
+    ]
 
-    [queue.put_nowait("https://www.sreality.cz"+f"{link}")for link in links]
+    [queue.put_nowait("https://www.sreality.cz" + f"{link}") for link in links]
 
     # put default value
-    queue.put_nowait(("https://www.sreality.cz/hledani/pronajem/byty/praha-6", {"velikost": ",".join(["1+1", "1+kk"]),
-                                                                                "strana": 1}))
+    queue.put_nowait(
+        (
+            "https://www.sreality.cz/hledani/pronajem/byty/praha-6",
+            {"velikost": ",".join(["1+1", "1+kk"]), "strana": 1},
+        )
+    )
 
     w = worker(queue)
 
@@ -156,13 +197,23 @@ def runner():
 
     loop = asyncio.get_event_loop()
     logging.info("Started loop.")
-    loop.run_until_complete(_generate_items_pages_run("https://www.sreality.cz/hledani/pronajem/byty/praha-6", queue, {"velikost": ",".join(["1+1", "1+kk"]),
-                                                                                "strana": 1}))
-    loop.run_until_complete(asyncio.wait([worker(f"worker{n_worker}", queue) for n_worker in range(1, 4)]))
+    loop.run_until_complete(
+        _generate_items_pages_run(
+            "https://www.sreality.cz/hledani/pronajem/byty/praha-6",
+            queue,
+            {"velikost": ",".join(["1+1", "1+kk"]), "strana": 1},
+        )
+    )
+    loop.run_until_complete(
+        asyncio.wait([worker(f"worker{n_worker}", queue) for n_worker in range(1, 4)])
+    )
     loop.close()
     loop = asyncio.set_event_loop(asyncio.get_event_loop())
-    loop.run_until_complete(_generate_items_pages("https://www.sreality.cz/hledani/prodej/byty/praha"))
+    loop.run_until_complete(
+        _generate_items_pages("https://www.sreality.cz/hledani/prodej/byty/praha")
+    )
     loop.close()
+
 
 # runner()
 
@@ -494,18 +545,18 @@ Other tests
 #         # x = propsColection.insert_one(page_dict)
 #         # print(x.inserted_id)
 #         # x = propsColection.find_one(page_dict)
-#         # print(x)                                                                                                                    
+#         # print(x)
 #         doc_id = page_dict_new["_id"]
 #         del page_dict_new["_id"]
 
 #         # print({ **page_dict, **{"created_at_utc": datetime.utcnow()}})
 
 #         x = propsColection.update_one(
-#             {"_id": doc_id}, 
+#             {"_id": doc_id},
 #             {
-#                 "$setOnInsert": {"created_at_utc": datetime.utcnow()}, 
+#                 "$setOnInsert": {"created_at_utc": datetime.utcnow()},
 #                 "$set": { **page_dict_new, **{"updated_at_utc": datetime.utcnow()}}
-#             }, 
+#             },
 #             upsert=True)
 #         print(x.raw_result)
 # if not isinstance(page_dict, None):

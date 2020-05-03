@@ -2,6 +2,7 @@ import unittest
 from src.parser import Parser
 import hashlib
 
+
 class ParserTest(unittest.TestCase):
 
     with open("tests/pages/advertisement_page.html") as html_file:
@@ -12,8 +13,14 @@ class ParserTest(unittest.TestCase):
 
     testParser = Parser(html, "www.testpage.com")
     emptyParser = Parser("", "")
-    realUrlParser = Parser(html,"https://www.sreality.cz/detail/pronajem/byt/5+1/praha-vinor-uherska/142990940")
-    expiredAdvert = Parser(expired_html, "https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/1267392092")
+    realUrlParser = Parser(
+        html,
+        "https://www.sreality.cz/detail/pronajem/byt/5+1/praha-vinor-uherska/142990940",
+    )
+    expiredAdvert = Parser(
+        expired_html,
+        "https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/1267392092",
+    )
 
     def _id_hash(self, url):
         hash_object = hashlib.sha1(url.encode())
@@ -32,10 +39,11 @@ class ParserTest(unittest.TestCase):
         self.assertEqual(realUrl.get("typ_smlouvy"), "pronajem")
         self.assertEqual(realUrl.get("typ_nemovitosti"), "byt")
         self.assertEqual(advert_dict["url"], "www.testpage.com")
-        self.assertEqual(emptyPage,None)
+        self.assertEqual(emptyPage, None)
         self.assertEqual(expiredAdvert_dict.get("aktivni"), False)
         with self.assertRaises(TypeError):
             emptyPage["url"]
+
 
 if __name__ == "__main__":
     unittest.main()

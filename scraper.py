@@ -3,7 +3,7 @@ import logging
 import requests_html
 from time import time
 import unicodedata
-from  bs4 import BeautifulSoup
+from bs4 import BeautifulSoup
 import re
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -25,18 +25,18 @@ SIZE = ["pokoj"]
 
 HEADERS = {
     "Referer": "https://www.sreality.cz/hledani/pronajem/byty/praha?1%2Bkk",
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36",
 }
 
-PARAMS = {
-    "velikost": ",".join(SIZE)
-}
+PARAMS = {"velikost": ",".join(SIZE)}
+
 
 def createURL(endpoint, city="praha", ad_type="pronajem", property_type="byty"):
     if isinstance(city, list):
         city = ",".join([city])
     url = f"{endpoint}/hledani/{ad_type}/{property_type}/{city}"
     return url
+
 
 def get_properties(url, headers, params={}):
     properties = set()
@@ -45,9 +45,7 @@ def get_properties(url, headers, params={}):
     while True:
         with requests_html.HTMLSession() as session:
             params["sprint(result.html.url)trana"] = counter
-            response = session.get(url,
-                                   headers=headers,
-                                   params=params)
+            response = session.get(url, headers=headers, params=params)
             # logging.info(response.url)
             nextPage = False
             if response.status_code == 200:
@@ -61,23 +59,31 @@ def get_properties(url, headers, params={}):
                     for link in links:
                         link = str(link)
                         if " href='/detail/" in link:
-                            property_link = [element.split("=")[1].replace("'", "") for element in link.split() if element.startswith("href='/detail/")][0]
+                            property_link = [
+                                element.split("=")[1].replace("'", "")
+                                for element in link.split()
+                                if element.startswith("href='/detail/")
+                            ][0]
                             properties.add(property_link)
                             # logging.info(property_link)
-                        elif "ng-class='{disabled: !pagingData.nextUrl}'" in link and "href='/hledani" in link:
+                        elif (
+                            "ng-class='{disabled: !pagingData.nextUrl}'" in link
+                            and "href='/hledani" in link
+                        ):
                             nextPage = True
             else:
-                raise(f"Got status code {response.status_code}")
+                raise (f"Got status code {response.status_code}")
             counter += 1
             if not nextPage:
                 return properties
+
 
 def parse_property_page(soupObject):
     item = dict()
     soup = soupObject
     if not None:
         for ul in soup.find("div", class_="params clear").findAll("ul"):
-            for li in ul.findAll("li"): 
+            for li in ul.findAll("li"):
                 label = li.find("label").text[:-1]
                 value = list()
                 for span in li.findAll("span"):
@@ -85,10 +91,10 @@ def parse_property_page(soupObject):
                         value = False
                     elif span.get("ng-if") == "item.type == 'boolean-true'":
                         value = True
-                    elif span.text == 'm2':
+                    elif span.text == "m2":
                         pass
-                    else: 
-                        value.append(unicodedata.normalize("NFKD",span.text))
+                    else:
+                        value.append(unicodedata.normalize("NFKD", span.text))
                 if isinstance(value, list):
                     item[label] = " ".join(value)
                 else:
@@ -96,7 +102,9 @@ def parse_property_page(soupObject):
 
         # item["ad_id"] = url.split("/")[-1:][0]
         item["adress"] = soup.find("span", class_="location-text ng-binding").text
-        price_string = unicodedata.normalize("NFKD",soup.find("span", class_="norm-price ng-binding").text)
+        price_string = unicodedata.normalize(
+            "NFKD", soup.find("span", class_="norm-price ng-binding").text
+        )
         logging.info(price_string)
         price = re.findall(r"\d+", price_string)
         item["price_value"] = "".join(price)
@@ -104,6 +112,7 @@ def parse_property_page(soupObject):
         return None
 
     return item
+
 
 # await def test_as_get(pro):
 #     with requests_html.AsyncHTMLSession() as assesion:
@@ -131,12 +140,13 @@ def parse_property_page(soupObject):
 #             tasks = [await loop.run_in_executor(executor, get_property, *(assesion, prop)) for prop in properties]
 
 #             return await asyncio.gather(*tasks)
-            
-                # soup = BeautifulSoup(str(response), "html.parser")
-                # logging.info(parse_property_page(soup))
-                # parsed_page parse_property_page(soup, prop)
-                # logging.info(response)
-                # return
+
+# soup = BeautifulSoup(str(response), "html.parser")
+# logging.info(parse_property_page(soup))
+# parsed_page parse_property_page(soup, prop)
+# logging.info(response)
+# return
+
 
 async def fetch(prop, semaphore):
     async with semaphore:
@@ -148,9 +158,11 @@ async def fetch(prop, semaphore):
         await asession.close()
     return page
 
+
 # async def bound_fetch(prop, asession, semaphore):
 #     async with semaphore:
 #         await fetch(prop, asession)
+
 
 async def run(propties_list):
     semaphore = asyncio.Semaphore(2)
@@ -171,21 +183,22 @@ async def run(propties_list):
     #         # break
     #     else:
     #         return advert.html.url
-            # soup = BeautifulSoup(str(advert.html.text), "html.parser")
-            # return parse_property_page(soup)
-            # with open()
-            # file_name = "pages/{}.html".format(advert.html.url.split("/")[-1])
-            # loggin g.info(file_name)
-            # if os.path.exists("pages/"):
-            #     with open(file_name, 'w') as file:
-            #         file.write(advert.html.html)
-            #         file.close()
-            # else:
-            #     os.mkdir("pages/")
-            #     with open(file_name, 'w') as file:
-            #         file.write(advert.html.html)
-            #         file.close()
-            # advert.html.url
+    # soup = BeautifulSoup(str(advert.html.text), "html.parser")
+    # return parse_property_page(soup)
+    # with open()
+    # file_name = "pages/{}.html".format(advert.html.url.split("/")[-1])
+    # loggin g.info(file_name)
+    # if os.path.exists("pages/"):
+    #     with open(file_name, 'w') as file:
+    #         file.write(advert.html.html)
+    #         file.close()
+    # else:
+    #     os.mkdir("pages/")
+    #     with open(file_name, 'w') as file:
+    #         file.write(advert.html.html)
+    #         file.close()
+    # advert.html.url
+
 
 # url = createURL(ENDPOINT_URL, city="praha")
 # logging.info(url)
@@ -193,24 +206,26 @@ async def run(propties_list):
 # logging.info(f"Found adverts: {len(properties)}")
 # properties = [ENDPOINT_URL + ad for ad in properties]
 # print(properties)
-# properties = [  'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-stodulky-pod-viaduktem/4140949084', 
-#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-karlin-/2899873372', 
-#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-stodulky-okruhova/2744639068', 
-#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-karlin-peckova/3676266844', 
-#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-hrdlorezy-mezitratova/1961549404', 
-#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/4203404892', 
+# properties = [  'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-stodulky-pod-viaduktem/4140949084',
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-karlin-/2899873372',
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-stodulky-okruhova/2744639068',
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-karlin-peckova/3676266844',
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-hrdlorezy-mezitratova/1961549404',
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/4203404892',
 #                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/3664895580',
-#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-konevova/907603548', 
-#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-krc-/2703658588', 
-#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-strasnice-u-hraze/273604188', 
-#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-vinohrady-belehradska/1850072668', 
-#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-vinohrady-trebizskeho/887152220', 
-#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/1267392092', 
-#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-hostavice-pilska/1719066204', 
-#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-chodov-klirova/4216381020', 
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-konevova/907603548',
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-krc-/2703658588',
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-strasnice-u-hraze/273604188',
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-vinohrady-belehradska/1850072668',
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-vinohrady-trebizskeho/887152220',
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/1267392092',
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-hostavice-pilska/1719066204',
+#                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-chodov-klirova/4216381020',
 #                 'https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-zizkov-rehorova/4201766492']
 
-properties = ["https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-vinohrady-belehradska/1850072668"]
+properties = [
+    "https://www.sreality.cz/detail/pronajem/byt/pokoj/praha-vinohrady-belehradska/1850072668"
+]
 loop = asyncio.get_event_loop()
 loop.set_debug(True)
 future = asyncio.ensure_future(run(properties))
@@ -223,7 +238,7 @@ for result in results:
     #     print(result.html.url)
     # res_dict[result.html.url] = [page_dict,result.html.html]
     # print(res_dict)
-    
+
     # if page:
     #     print_var = f"""
     #                 #####################################
@@ -277,27 +292,27 @@ for result in results:
 #     loop = asyncio.get_event_loop()
 #     furure = asyncio.ensure_future(get_properties_dict(properties))
 #     loop.run_until_complete(furure)
-#     return 
+#     return
 
 # async def get_data_a_test(properties):
 #     responses = []
 #     asession = requests_html.AsyncHTMLSession()
 
 #     for prop in properties:
-#         response = asession.get(prop, headers=HEADERS) 
+#         response = asession.get(prop, headers=HEADERS)
 #         response.html.arender()
 #         responses.append(response)
 
 #     return responses
 
 
-    # for prop in properties:
-    #     with requests_html.AsyncHTMLSession() as asession:
-    #             response = asession.get(prop, headers=HEADERS)
-    #             response.html.arender()
-    #             responses.append(response)
-    # logging.info(responses)
-    # return responses
+# for prop in properties:
+#     with requests_html.AsyncHTMLSession() as asession:
+#             response = asession.get(prop, headers=HEADERS)
+#             response.html.arender()
+#             responses.append(response)
+# logging.info(responses)
+# return responses
 
 
 # def get_properties_dict(properties):
@@ -341,7 +356,6 @@ for result in results:
 # pool.join()
 # print(output)
 # logging.info(f"Test:{x}")
-
 
 
 # pool = Pool(processes=3)
