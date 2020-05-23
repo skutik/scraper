@@ -130,6 +130,7 @@ class Scraper:
         self.max_workers = max_workers
         self.mongo_client = MongoInterface(test_enviroment=test_enviroment)
 
+    #TODO: change for staticmethod
     @property
     def _current_timestamp(self):
         """
@@ -229,6 +230,7 @@ class Scraper:
             "seo_locality": property_dict["seo"]["locality"],
             "seo_params": property_dict["seo"],
             "locality": property_dict["locality"]["value"],
+            "locality_district_id": property_dict["locality_district_id"]
         }
         if property_dict.get("contact"):
             if property_dict["contact"].get("phones"):

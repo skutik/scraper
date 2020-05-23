@@ -9,6 +9,8 @@ loop = asyncio.get_event_loop()
 mi = MongoInterface(test_enviroment=True)
 app = Flask("__name__")
 
+MAX_LIMIT = 100
+
 def fetch_estate(estate_id):
     return loop.run_until_complete(mi.fetch_estate(estate_id))
 
@@ -28,6 +30,9 @@ def fetch_user(email):
         mi.fetch_user(email=email)
     )
 
+def query_estate_collection():
+    pass
+
 @app.route("/")
 def index_page():
     return "Welcome to estates scraper!"
@@ -39,7 +44,7 @@ def get_estate():
         data = fetch_estate(estate_id)
         logging.debug(data)
         if data:
-            return jsonify({"status": "ok", "estate_id": estate_id, "data": data}), 200
+            return jsonify({"status": "success", "estate_id": estate_id, "data": data}), 200
         else:
             return jsonify({"status": "failed", "estate_id": estate_id, "message": "No estate with provided id doesn't exist"}), 404
     else:
@@ -51,7 +56,7 @@ def get_filters():
         data = fetch_filters()
         logging.debug(data)
         if data:
-            return jsonify({"status": "ok", "data": data}), 200
+            return jsonify({"status": "success", "data": data}), 200
         else:
             return jsonify({"status": "failed", "message": "Data unavailable"}), 404
     else:
@@ -64,7 +69,7 @@ def get_user():
         data = fetch_user(email)
         logging.debug(data)
         if data:
-            return jsonify({"status": "ok", "data": data}), 200
+            return jsonify({"status": "success", "data": data}), 200
         else:
             return jsonify({"status": "failed", "message": "User doesn't exist"}), 404
     else:
@@ -74,10 +79,23 @@ def get_user():
 def get_estate_by_query():
     if request.method == "GET":
         logging.debug(request.args)
-        limit = request.args.get("limit", type=int)
+        logging.debug(type(request.args))
+        availability = request.args.get("availability", default=True, type=bool)
+        min_floorage = request.args.get("min_floorage", default=0, type=int)
+        price_limit = request.args.get("price_limit", type=int)
+        estate_type = request.args.get("estate_type", type=int)
+        estate_agr_type = request.args.get("estate_agr_type", type=int)
+        estate_category = request.args.get("estate_category", type=int)
+        region = request.args.get("region", type=int)
+        district = request.args.get("district", type=int)
+        url_only = request.args.get("url_only", True, type=bool)
+        limit = request.args.get("limit", default=100, type=int)
+        if limit > 100:
+            return jsonify({"status": "failed", "message": "Not Allowed Limit, API Can Return Max 100 Results per Request"}), 401
         sort = request.args.get("sort", type=str)
-        logging.debug(f"Limit: {limit}")
-    return jsonify({"status": "ok"}), 200
+        return jsonify({"status": "ok"}), 200
+    else:
+        return jsonify({"status": "failed", "message": "Method Not Allowed"}), 405
 
 @app.route("/upsert_property", methods=["POST"])
 def upsert_property():
