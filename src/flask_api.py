@@ -1,7 +1,9 @@
 import asyncio
 from flask import Flask, request, jsonify
 from src.mongo_interface import MongoInterface
+from src.api_exceptions import LimitError, MissingRequiredParams, SortingDefinitionError
 import logging
+from pymongo import ASCENDING, DESCENDING
 
 logging.getLogger().setLevel(logging.DEBUG)
 
@@ -25,13 +27,18 @@ def fetch_filters():
         ]
     return filters
 
+def fetch_estates(filter, projection, sort, limit):
+    estates_list = loop.run_until_complete(mi.fetch_estates(filter, projection, sort, limit))
+    # logging.debug(estates_list)
+    if projection:
+        return [estate.get("estate_url") for estate in estates_list]
+    return estates_list
+
+
 def fetch_user(email):
     return loop.run_until_complete(
         mi.fetch_user(email=email)
     )
-
-def query_estate_collection():
-    pass
 
 @app.route("/")
 def index_page():
@@ -77,23 +84,108 @@ def get_user():
 
 @app.route("/query_estates")
 def get_estate_by_query():
+
+    def query_db(request_args):
+
+        filter_query = dict()
+
+        # Number of max returned estates (Limit is 100 estates per request)
+        limit = request_args.get("limit", default=10, type=int)
+        if limit not in range(1, 101):
+            raise LimitError(f"Provided limit value '{limit}' is not allowed")
+
+        # Type of estate: Flat, House, Land
+        estate_type = request_args.getlist("estate_type", type=int)
+        # Agreement type: Sale, Lease, Auction
+        estate_agr_type = request_args.getlist("estate_agr_type", type=int)
+        if not estate_type or not estate_agr_type:
+            MissingRequiredParams()
+
+        filter_query["category_main_cb"] = {"$in": estate_type}
+        filter_query["category_type_cb"] = {"$in": estate_agr_type}
+
+        # If true, then provide only estates with in available state
+        available_only = request_args.get("availability", default=True, type=bool)
+        if available_only:
+            filter_query["available"] = True
+
+        # Min. floor area
+        # min_floorage = request_args.get("min_floorage", default=0, type=int)
+        # filter_query["usable_area"] = {"qte": min_floorage}
+
+        # Max price: For whole estate or monthly rent in the case of lease, default 1 for skipping estates with
+        # unknown price
+        price_limit = request_args.get("price_limit", default=1, type=int)
+        filter_query["price_czk"] = {"$lte": price_limit}
+
+        # Estate category: Could be flat proportion (3 + 1, 4 + kk, ..,), house for living, cottage, ...
+        estate_category = request_args.get("estate_category", type=int)
+        if estate_category:
+            filter_query["category_sub_cb"] = {"$in": [estate_category]}
+
+        # Please note that values for region and district can overlap since both values are connected with OR operator.
+        # Therefore if user specifis whole region (e.g. region A) there is no need to explicitly specify also distrinc
+        # from selected region because region will be already contained within results.
+        # On the other hand, if user specifies whole region and also specify district outside of the selected region
+        # then will be returned estates for whole region + extra district.
+
+        # Region ID (Only Czech Rep.)
+        region = request_args.get("region", type=int)
+        if region:
+            filter_query[""] = {"$in": region}
+
+        # District ID (Only Czech Rep.)
+        district = request_args.get("district", type=int)
+        if district:
+            filter_query["locality_district_id"] = {"$in": district}
+
+        # Parameter tells if whole estate object should be returned or just list of estates URLs
+        url_only = request_args.get("url_only", type=str)
+        # if not url_only or url_only.lower() in ["0", "false", "f"]:
+        url_only = {"estate_url": 1, "_id": 0} if not url_only or url_only.lower() in ["0", "false", "f"] else None
+
+        # Sorting attribute (e.g. price - then will be returned top x results with the lowest price)
+        sort_keys = request.args.getlist("sort", type=str)
+        sort_types = request_args.getlist("sort_type", type=int)
+        if len(sort_keys) < len(sort_types):
+            raise SortingDefinitionError()
+
+        # Extend length with default values (ASCENDING sort) to be equal to 'sort_keys' list
+        sort_types.extend([1] * (len(sort_keys) - len(sort_types)))
+        # sort_types = [DESCENDING if sort_type == -1 else ASCENDING for sort_type in sort_types]
+        # sorting = {"$sort": {key: sorting for key, sorting in zip(sort_keys, sort_types)}}
+        sorting = [(sort_key, DESCENDING if sort_type == -1 else ASCENDING) for sort_key, sort_type in zip(sort_keys, sort_types)]
+
+        logging.debug(filter_query)
+        logging.debug(url_only)
+
+        return fetch_estates(filter=filter_query, projection=url_only, sort=sorting, limit=limit)
+
+
+
     if request.method == "GET":
         logging.debug(request.args)
-        logging.debug(type(request.args))
-        availability = request.args.get("availability", default=True, type=bool)
-        min_floorage = request.args.get("min_floorage", default=0, type=int)
-        price_limit = request.args.get("price_limit", type=int)
-        estate_type = request.args.get("estate_type", type=int)
-        estate_agr_type = request.args.get("estate_agr_type", type=int)
-        estate_category = request.args.get("estate_category", type=int)
-        region = request.args.get("region", type=int)
-        district = request.args.get("district", type=int)
-        url_only = request.args.get("url_only", True, type=bool)
-        limit = request.args.get("limit", default=100, type=int)
-        if limit > 100:
-            return jsonify({"status": "failed", "message": "Not Allowed Limit, API Can Return Max 100 Results per Request"}), 401
-        sort = request.args.get("sort", type=str)
-        return jsonify({"status": "ok"}), 200
+
+        logging.debug(request.args.getlist("estate_type", type=int))
+        logging.debug(request.args.get("url_only", True, type=str))
+
+        try:
+            data = query_db(request.args)
+        except LimitError:
+            return jsonify({"status": "failed", "message": "Out of the Allowed Limit or Wrong Value"}), 400
+        except MissingRequiredParams:
+            return jsonify({"status": "failed", "message": "Missing One or More Required Params"}), 400
+        except SortingDefinitionError:
+            return jsonify({"status": "failed", "message": "Sorting Params Contains More Sorting Types Then Keys"})
+        # except Exception:
+        #     return jsonify({"status": "failed", "message": "Unknown Error"}), 400
+        else:
+            return jsonify({"status": "success", "data": data}), 200
+
+
+        # return jsonify({"status": "failed", "message": "Not Allowed Limit, API Can Return Max 100 Results per Request"}), 401
+
+        # return jsonify({"status": "ok"}), 200
     else:
         return jsonify({"status": "failed", "message": "Method Not Allowed"}), 405
 

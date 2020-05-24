@@ -77,8 +77,18 @@ class MongoInterface:
     async def fetch_estate(self, document_id):
         return await self.mongo_client[self.database][self.estates_collection].find_one({"_id": document_id})
 
-    async def query_estates(self, query):
-        pass
+    def fetch_estates(self, filter, projection, sort=None, limit=10):
+        return self.mongo_client[self.database][self.estates_collection].find(
+            filter=filter,
+            projection=projection,
+            limit=limit,
+            sort=sort
+        ).sort(sort).to_list(None) if sort else self.mongo_client[self.database][self.estates_collection].find(
+            filter=filter,
+            projection=projection,
+            limit=limit,
+            sort=sort
+        ).to_list(None)
 
     async def upsert_user_preferences(self, email, filter_category, values):
         # logging.debug(email)
