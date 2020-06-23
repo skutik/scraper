@@ -57,6 +57,8 @@ class MongoInterface:
 
     async def upsert_filters(self, filters_dict):
         for key, values in filters_dict.items():
+            logging.debug(f"Upserting filter {key}")
+            logging.debug(f"Values: {values}")
             response = await self.mongo_client[self.database][
                 self.filters_collection
             ].update_one(

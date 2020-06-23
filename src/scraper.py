@@ -6,7 +6,6 @@ import json
 import asyncio
 import aiohttp
 from src.mongo_interface import MongoInterface
-from src.config import TEST_DATABALSE, ESTATE_COLLECTION, PRODUCTION_DATABASE
 
 logging.getLogger().setLevel(logging.DEBUG)
 
@@ -22,6 +21,7 @@ class Scraper:
         "floor_number",
         "usable_area",
         "estate_area",
+        "pois_in_place_distance"
     ]
     PROPERTY_ATTRIBUTES_MAP = {
         "Celková cena": "Total price",
@@ -150,34 +150,57 @@ class Scraper:
         if response.status_code == 200:
             return json.loads(response.text, encoding="utf-8")
 
+    @staticmethod
+    def _convert_to_int(number):
+        try:
+            return int(number)
+        except ValueError:
+            return number
+
     def _find_values(self, values_list):
         output_dict = {}
+
         for filter_dict in values_list:
             if filter_dict.get("values", []):
                 output_dict.update(self._find_values(filter_dict["values"]))
             elif filter_dict.get("value", ""):
-                output_dict[filter_dict["name"]] = filter_dict.get("value")
+                key = filter_dict["value"]
+                if not isinstance(filter_dict["value"], str):
+                    key = str(key)
+
+                output_dict[key] = filter_dict.get("name")
+
         return output_dict
 
     def _parse_filters(self, categories_dict=dict):
         filters = dict()
+
         for filter_category, values in categories_dict.get(
             "linked_filters", {}
         ).items():
+
             if filter_category not in self.FILTERS_TO_IGNORE:
                 filters[filter_category] = {}
                 filters[filter_category].update(
                     self._find_values(values.get("values", []))
                 )
+
         for item in categories_dict.get("filters", {}).values():
             for values in item.values():
                 for value_dict in values:
-                    if value_dict.get("values"):
+
+                    if value_dict.get("values") and filters.get(value_dict["key"]) not in self.FILTERS_TO_IGNORE:
+
                         if not filters.get(value_dict["key"]):
                             filters[value_dict["key"]] = {}
                         filters[value_dict["key"]].update(
                             self._find_values(value_dict["values"])
                         )
+
+        for filter in self.FILTERS_TO_IGNORE:
+            if filter in filters:
+                del filters[filter]
+
         return filters
 
     async def _update_filters(self):
@@ -214,8 +237,8 @@ class Scraper:
 
         return f"https://www.sreality.cz/detail/{values_map.get(cat_type, cat_type)}/{values_map.get(cat_main, cat_main)}/{values_map.get(cat_sub, cat_sub).lower()}/{seo_dict.get('locality')}/{hash_id}"
 
-    @staticmethod
-    def _parse_estate(property_dict: dict, map_dict=None):
+    # @staticmethod
+    def _parse_estate(self, property_dict: dict, map_dict=None):
         if not map_dict:
             map_dict = dict()
         property = {
@@ -267,9 +290,9 @@ class Scraper:
         for item in property_dict["items"]:
             name = map_dict.get(item["name"], item["name"])
             if isinstance(item["value"], list):
-                property[name] = [value["value"] for value in item["value"]]
+                property[name] = [self._convert_to_int(value["value"]) for value in item["value"]]
             else:
-                property[name] = item["value"]
+                property[name] = self._convert_to_int(item["value"])
             if item.get("currency"):
                 property[f"{name}_currency"] = item["currency"]
             if item.get("unit"):
@@ -309,7 +332,7 @@ class Scraper:
     async def _fetch_estate(self, hash_id):
         params = {"tms": self._current_timestamp}
         async with self.session.get(
-            "https://www.sreality.cz/api/en/v2/estates/" + str(hash_id), params=params
+            "https://www.sreality.cz/api/cs/v2/estates/" + str(hash_id), params=params
         ) as response:
             logging.debug(f"Processing URL {response.url}")
             if response.status == 200:

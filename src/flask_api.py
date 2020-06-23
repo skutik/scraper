@@ -11,6 +11,8 @@ loop = asyncio.get_event_loop()
 mi = MongoInterface(test_enviroment=True)
 app = Flask("__name__")
 
+app.config["TESTING"] = False
+
 MAX_LIMIT = 100
 
 def fetch_estate(estate_id):
@@ -29,7 +31,6 @@ def fetch_filters():
 
 def fetch_estates(filter, projection, sort, limit):
     estates_list = loop.run_until_complete(mi.fetch_estates(filter, projection, sort, limit))
-    # logging.debug(estates_list)
     if projection:
         return [estate.get("estate_url") for estate in estates_list]
     return estates_list
@@ -40,49 +41,50 @@ def fetch_user(email):
         mi.fetch_user(email=email)
     )
 
+
 @app.route("/")
 def index_page():
     return "Welcome to estates scraper!"
 
-@app.route("/fetch_estate") #, methods=["GET"])
+
+@app.route("/ping", methods=["GET"])
+def ping():
+    return jsonify({"ping": "pong"}), 200
+
+
+@app.route("/fetch_estate", methods=["GET"])
 def get_estate():
-    if request.method == "GET":
-        estate_id = request.args.get("id", type=str)
-        data = fetch_estate(estate_id)
-        logging.debug(data)
-        if data:
-            return jsonify({"status": "success", "estate_id": estate_id, "data": data}), 200
-        else:
-            return jsonify({"status": "failed", "estate_id": estate_id, "message": "No estate with provided id doesn't exist"}), 404
+    estate_id = request.args.get("id", type=str)
+    data = fetch_estate(estate_id)
+    logging.debug(data)
+    if data:
+        return jsonify({"status": "success", "estate_id": estate_id, "data": data}), 200
     else:
-        return jsonify({"status": "failed", "message": "Method Not Allowed"}), 405
+        return jsonify({"status": "failed", "estate_id": estate_id, "message": "No estate with provided id doesn't exist"}), 404
 
-@app.route("/fetch_filters")
+
+@app.route("/fetch_filters", methods=["GET"])
 def get_filters():
-    if request.method == "GET":
-        data = fetch_filters()
-        logging.debug(data)
-        if data:
-            return jsonify({"status": "success", "data": data}), 200
-        else:
-            return jsonify({"status": "failed", "message": "Data unavailable"}), 404
+    data = fetch_filters()
+    logging.debug(data)
+    if data:
+        return jsonify({"status": "success", "data": data}), 200
     else:
-        return jsonify({"status": "failed", "message": "Method Not Allowed"}), 405
+        return jsonify({"status": "failed", "message": "Data unavailable"}), 404
 
-@app.route("/fetch_user")
+
+@app.route("/fetch_user", methods=["GET"])
 def get_user():
-    if request.method == "GET":
-        email = request.args.get("email", type=str)
-        data = fetch_user(email)
-        logging.debug(data)
-        if data:
-            return jsonify({"status": "success", "data": data}), 200
-        else:
-            return jsonify({"status": "failed", "message": "User doesn't exist"}), 404
+    email = request.args.get("email", type=str)
+    data = fetch_user(email)
+    logging.debug(data)
+    if data:
+        return jsonify({"status": "success", "data": data}), 200
     else:
-        return jsonify({"status": "failed", "message": "Method Not Allowed"}), 405
+        return jsonify({"status": "failed", "message": "User doesn't exist"}), 404
 
-@app.route("/query_estates")
+
+@app.route("/query_estates", methods=["GET"])
 def get_estate_by_query():
 
     def query_db(request_args):
@@ -99,7 +101,7 @@ def get_estate_by_query():
         # Agreement type: Sale, Lease, Auction
         estate_agr_type = request_args.getlist("estate_agr_type", type=int)
         if not estate_type or not estate_agr_type:
-            MissingRequiredParams()
+            raise MissingRequiredParams()
 
         filter_query["category_main_cb"] = {"$in": estate_type}
         filter_query["category_type_cb"] = {"$in": estate_agr_type}
@@ -109,14 +111,15 @@ def get_estate_by_query():
         if available_only:
             filter_query["available"] = True
 
-        # Min. floor area
-        # min_floorage = request_args.get("min_floorage", default=0, type=int)
-        # filter_query["usable_area"] = {"qte": min_floorage}
+        # Min. usable area
+        min_usable = request_args.get("min_usable", default=0, type=int)
+        filter_query["usable_area"] = {"$gte": min_usable}
 
         # Max price: For whole estate or monthly rent in the case of lease, default 1 for skipping estates with
         # unknown price
-        price_limit = request_args.get("price_limit", default=1, type=int)
-        filter_query["price_czk"] = {"$lte": price_limit}
+        price_limit = request_args.get("price_limit", default=None, type=int)
+        if price_limit:
+            filter_query["price_czk"] = {"$lte": price_limit}
 
         # Estate category: Could be flat proportion (3 + 1, 4 + kk, ..,), house for living, cottage, ...
         estate_category = request_args.get("estate_category", type=int)
@@ -140,9 +143,10 @@ def get_estate_by_query():
             filter_query["locality_district_id"] = {"$in": district}
 
         # Parameter tells if whole estate object should be returned or just list of estates URLs
-        url_only = request_args.get("url_only", type=str)
+        url_only = request_args.get("url_only", default=None, type=str)
+        logging.debug(type(url_only))
         # if not url_only or url_only.lower() in ["0", "false", "f"]:
-        url_only = {"estate_url": 1, "_id": 0} if not url_only or url_only.lower() in ["0", "false", "f"] else None
+        url_only = {"estate_url": 1, "_id": 0} if url_only and url_only.lower() in ["0", "false", "f"] else None
 
         # Sorting attribute (e.g. price - then will be returned top x results with the lowest price)
         sort_keys = request.args.getlist("sort", type=str)
@@ -157,38 +161,26 @@ def get_estate_by_query():
         sorting = [(sort_key, DESCENDING if sort_type == -1 else ASCENDING) for sort_key, sort_type in zip(sort_keys, sort_types)]
 
         logging.debug(filter_query)
-        logging.debug(url_only)
 
         return fetch_estates(filter=filter_query, projection=url_only, sort=sorting, limit=limit)
 
-
-
-    if request.method == "GET":
-        logging.debug(request.args)
-
-        logging.debug(request.args.getlist("estate_type", type=int))
-        logging.debug(request.args.get("url_only", True, type=str))
-
-        try:
-            data = query_db(request.args)
-        except LimitError:
-            return jsonify({"status": "failed", "message": "Out of the Allowed Limit or Wrong Value"}), 400
-        except MissingRequiredParams:
-            return jsonify({"status": "failed", "message": "Missing One or More Required Params"}), 400
-        except SortingDefinitionError:
-            return jsonify({"status": "failed", "message": "Sorting Params Contains More Sorting Types Then Keys"})
-        # except Exception:
-        #     return jsonify({"status": "failed", "message": "Unknown Error"}), 400
-        else:
-            return jsonify({"status": "success", "data": data}), 200
-
-
-        # return jsonify({"status": "failed", "message": "Not Allowed Limit, API Can Return Max 100 Results per Request"}), 401
-
-        # return jsonify({"status": "ok"}), 200
+    try:
+        data = query_db(request.args)
+    except LimitError:
+        return jsonify({"status": "failed", "message": "Out of the Allowed Limit or Wrong Value"}), 400
+    except MissingRequiredParams:
+        return jsonify({"status": "failed", "message": "Missing One or More Required Params"}), 400
+    except SortingDefinitionError:
+        return jsonify({"status": "failed", "message": "Sorting Params Contains More Sorting Types Then Keys"}), 400
+    # except Exception:
+    #     return jsonify({"status": "failed", "message": "Unknown Error"}), 400
     else:
-        return jsonify({"status": "failed", "message": "Method Not Allowed"}), 405
+        return jsonify({"status": "success", "data": data}), 200
 
 @app.route("/upsert_property", methods=["POST"])
 def upsert_property():
     pass
+
+@app.errorhandler(405)
+def method_not_allowed(*_):
+    return jsonify({"status": "failed", "message": "Method Not Allowed"}), 405
