@@ -15,8 +15,10 @@ app.config["TESTING"] = False
 
 MAX_LIMIT = 100
 
+
 def fetch_estate(estate_id):
     return loop.run_until_complete(mi.fetch_estate(estate_id))
+
 
 def fetch_filters():
     filters_list = loop.run_until_complete(mi.fecth_filters())
@@ -29,17 +31,18 @@ def fetch_filters():
         ]
     return filters
 
+
 def fetch_estates(filter, projection, sort, limit):
-    estates_list = loop.run_until_complete(mi.fetch_estates(filter, projection, sort, limit))
+    estates_list = loop.run_until_complete(
+        mi.fetch_estates(filter, projection, sort, limit)
+    )
     if projection:
         return [estate.get("estate_url") for estate in estates_list]
     return estates_list
 
 
 def fetch_user(email):
-    return loop.run_until_complete(
-        mi.fetch_user(email=email)
-    )
+    return loop.run_until_complete(mi.fetch_user(email=email))
 
 
 @app.route("/")
@@ -60,7 +63,16 @@ def get_estate():
     if data:
         return jsonify({"status": "success", "estate_id": estate_id, "data": data}), 200
     else:
-        return jsonify({"status": "failed", "estate_id": estate_id, "message": "No estate with provided id doesn't exist"}), 404
+        return (
+            jsonify(
+                {
+                    "status": "failed",
+                    "estate_id": estate_id,
+                    "message": "No estate with provided id doesn't exist",
+                }
+            ),
+            404,
+        )
 
 
 @app.route("/fetch_filters", methods=["GET"])
@@ -86,7 +98,6 @@ def get_user():
 
 @app.route("/query_estates", methods=["GET"])
 def get_estate_by_query():
-
     def query_db(request_args):
 
         filter_query = dict()
@@ -146,7 +157,11 @@ def get_estate_by_query():
         url_only = request_args.get("url_only", default=None, type=str)
         logging.debug(type(url_only))
         # if not url_only or url_only.lower() in ["0", "false", "f"]:
-        url_only = {"estate_url": 1, "_id": 0} if url_only and url_only.lower() in ["0", "false", "f"] else None
+        url_only = (
+            {"estate_url": 1, "_id": 0}
+            if url_only and url_only.lower() in ["0", "false", "f"]
+            else None
+        )
 
         # Sorting attribute (e.g. price - then will be returned top x results with the lowest price)
         sort_keys = request.args.getlist("sort", type=str)
@@ -158,28 +173,56 @@ def get_estate_by_query():
         sort_types.extend([1] * (len(sort_keys) - len(sort_types)))
         # sort_types = [DESCENDING if sort_type == -1 else ASCENDING for sort_type in sort_types]
         # sorting = {"$sort": {key: sorting for key, sorting in zip(sort_keys, sort_types)}}
-        sorting = [(sort_key, DESCENDING if sort_type == -1 else ASCENDING) for sort_key, sort_type in zip(sort_keys, sort_types)]
+        sorting = [
+            (sort_key, DESCENDING if sort_type == -1 else ASCENDING)
+            for sort_key, sort_type in zip(sort_keys, sort_types)
+        ]
 
         logging.debug(filter_query)
 
-        return fetch_estates(filter=filter_query, projection=url_only, sort=sorting, limit=limit)
+        return fetch_estates(
+            filter=filter_query, projection=url_only, sort=sorting, limit=limit
+        )
 
     try:
         data = query_db(request.args)
     except LimitError:
-        return jsonify({"status": "failed", "message": "Out of the Allowed Limit or Wrong Value"}), 400
+        return (
+            jsonify(
+                {
+                    "status": "failed",
+                    "message": "Out of the Allowed Limit or Wrong Value",
+                }
+            ),
+            400,
+        )
     except MissingRequiredParams:
-        return jsonify({"status": "failed", "message": "Missing One or More Required Params"}), 400
+        return (
+            jsonify(
+                {"status": "failed", "message": "Missing One or More Required Params"}
+            ),
+            400,
+        )
     except SortingDefinitionError:
-        return jsonify({"status": "failed", "message": "Sorting Params Contains More Sorting Types Then Keys"}), 400
+        return (
+            jsonify(
+                {
+                    "status": "failed",
+                    "message": "Sorting Params Contains More Sorting Types Then Keys",
+                }
+            ),
+            400,
+        )
     # except Exception:
     #     return jsonify({"status": "failed", "message": "Unknown Error"}), 400
     else:
         return jsonify({"status": "success", "data": data}), 200
 
+
 @app.route("/upsert_property", methods=["POST"])
 def upsert_property():
     pass
+
 
 @app.errorhandler(405)
 def method_not_allowed(*_):

@@ -11,3 +11,4 @@ services:
       - MONGODB_RW_PASS=${MONGODB_RW_PASS}
       # For printing output
       - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/usr/src/app/

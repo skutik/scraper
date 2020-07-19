@@ -7,7 +7,7 @@ from unittest import mock
 
 from src.scraper import Scraper
 
-scraper = Scraper(category_main=1, category_type=2, test=True)
+scraper = Scraper(category_main=1, category_type=2, test_enviroment=True)
 
 
 @patch("aiohttp.ClientSession.get")
