@@ -5,7 +5,7 @@ from asynctest import patch, CoroutineMock
 import datetime
 from unittest import mock
 
-from src.scraper_old import Scraper
+from src.scraper_backup import Scraper
 
 scraper = Scraper(category_main=1, category_type=2, test_enviroment=True)
 
