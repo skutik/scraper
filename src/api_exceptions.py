@@ -5,5 +5,6 @@ class LimitError(Exception):
 class MissingRequiredParams(Exception):
     pass
 
+
 class SortingDefinitionError(Exception):
     pass

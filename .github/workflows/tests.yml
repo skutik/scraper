@@ -22,4 +22,5 @@ jobs:
           PYTHONPATH: "/home/runner/work/scraper/"
       - name: Black
         run: |
-          python -m black --check --target-version=py37 .
+          python -m black --check --diff --target-version=py37 .
+          
