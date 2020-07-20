@@ -5,7 +5,7 @@ from asynctest import patch, CoroutineMock
 import datetime
 from unittest import mock
 
-from src.scraper import Scraper
+from src.scraper_backup import Scraper
 
 scraper = Scraper(category_main=1, category_type=2, test_enviroment=True)
 
@@ -46,7 +46,7 @@ async def test_fetch_estate_not_found(mock_get):
 
 
 def test_timestamp_generator():
-    with mock.patch("src.scraper.dt") as mock_datetime:
+    with mock.patch("src.scraper_backup.dt") as mock_datetime:
         mock_datetime.utcnow.return_value = datetime.datetime(2020, 2, 1)
         mock_datetime.side_effect = lambda *args, **kwargs: datetime.datetime(
             *args, **kwargs
