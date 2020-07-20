@@ -34,6 +34,11 @@ def test_query_estate_missing_param(client):
 
 
 def test_query_estate_unsupported_sorting(client):
-    response = client.get("/query_estates?estate_type=1&estate_agr_type=2&sort=last_update_utc&sort_type=-1&sort_type=-1")
+    response = client.get(
+        "/query_estates?estate_type=1&estate_agr_type=2&sort=last_update_utc&sort_type=-1&sort_type=-1"
+    )
     assert response.status_code == 400
-    assert response.json.get("message", "") == "Sorting Params Contains More Sorting Types Then Keys"
+    assert (
+        response.json.get("message", "")
+        == "Sorting Params Contains More Sorting Types Then Keys"
+    )

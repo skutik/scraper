@@ -12,16 +12,23 @@ import json
 import collections.abc
 
 
-class Scraper():
+class Scraper:
     ENDPOINT_URL = "https://www.sreality.cz"
     HEADERS = {
         "Referer": "https://www.sreality.cz/hledani/pronajem/byty/praha?1%2Bkk",
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36",
     }
 
     MONGODB_CONN_STRING = f"mongodb+srv://rw_dave:{os.getenv('MONGODB_RW_PASS')}@cluster0-6lpd8.mongodb.net/test?retryWrites=true&w=majority"
 
-    def __init__(self, city=None, size=None, search_type="pronajem", property_type="byty", headers=HEADERS):
+    def __init__(
+        self,
+        city=None,
+        size=None,
+        search_type="pronajem",
+        property_type="byty",
+        headers=HEADERS,
+    ):
         if city:
             if isinstance(city, str):
                 city = [city]
@@ -43,7 +50,11 @@ class Scraper():
     def _generate_url(self):
         if isinstance(self.city, list):
             self.city = ",".join([self.city])
-        return f"{self.ENDPOINT_URL}/hledani/{self.search_type}/{self.property_type}/{self.city}" if self.city else f"{self.ENDPOINT_URL}/hledani/{self.search_type}/{self.property_type}"
+        return (
+            f"{self.ENDPOINT_URL}/hledani/{self.search_type}/{self.property_type}/{self.city}"
+            if self.city
+            else f"{self.ENDPOINT_URL}/hledani/{self.search_type}/{self.property_type}"
+        )
 
     def _get_properties(self):
         url = self._generate_url
@@ -52,16 +63,19 @@ class Scraper():
         while True:
             with requests_html.HTMLSession() as session:
                 self.params["strana"] = counter
-                response = session.get(
-                    url, headers=self.headers, params=self.params)
+                response = session.get(url, headers=self.headers, params=self.params)
                 logging.info(response.url)
                 if response.status_code == 200:
                     response.html.render(timeout=30)
                     page = BeautifulSoup(response.html.html, "html.parser")
                     if page.find_all("a", class_="title"):
-                        [properties.add(a["href"])
-                         for a in page.find_all("a", class_="title")]
-                    if page.find_all("a", class_="btn-paging-pn icof icon-arr-right paging-next"):
+                        [
+                            properties.add(a["href"])
+                            for a in page.find_all("a", class_="title")
+                        ]
+                    if page.find_all(
+                        "a", class_="btn-paging-pn icof icon-arr-right paging-next"
+                    ):
                         counter += 1
                     else:
                         return properties
@@ -77,10 +91,14 @@ class Scraper():
         x = mongoCollection.update_one(
             {"_id": doc_id},
             {
-                "$setOnInsert": {"created_at_utc": datetime.utcnow(), "inserted_at_utc": datetime.utcnow()},
-                "$set": {**record_dict, **{"last_update_utc": datetime.utcnow()}}
+                "$setOnInsert": {
+                    "created_at_utc": datetime.utcnow(),
+                    "inserted_at_utc": datetime.utcnow(),
+                },
+                "$set": {**record_dict, **{"last_update_utc": datetime.utcnow()}},
             },
-            upsert=True)
+            upsert=True,
+        )
         return x.raw_result
 
     # https://stackoverflow.com/questions/3232943/update-value-of-a-nested-dictionary-of-varying-depth
@@ -108,7 +126,9 @@ class Scraper():
                 current_backup = dict()
             doc_id = self._id_hash(record_dict["url"])
             if doc_id in current_backup:
-                updated_backup = self._update_dict(current_backup, {doc_id: record_dict})
+                updated_backup = self._update_dict(
+                    current_backup, {doc_id: record_dict}
+                )
             else:
                 updated_backup = current_backup
                 updated_backup[doc_id] = record_dict
@@ -132,14 +152,16 @@ class Scraper():
             except pyppeteer.errors.TimeoutError as error:
                 print(error)
                 logging.info(f"During rendering {prop} occurred error {error}")
-               finally:
+            finally:
                 await asession.close()
                 return url, page
 
     async def _run(self, propties_list, timeout=20):
         semaphore = asyncio.Semaphore(2)
-        tasks = [asyncio.ensure_future(self._fetch_data(
-            adv, semaphore, timeout)) for adv in propties_list]
+        tasks = [
+            asyncio.ensure_future(self._fetch_data(adv, semaphore, timeout))
+            for adv in propties_list
+        ]
         return await asyncio.gather(*tasks)
 
     def run(self):

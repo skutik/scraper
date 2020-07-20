@@ -20,3 +20,6 @@ jobs:
           python -m pytest -v --disable-pytest-warnings tests/
         env:
           PYTHONPATH: "/home/runner/work/scraper/"
+      - name: Black
+        run: |
+          python -m black --check --target-version=py37 .

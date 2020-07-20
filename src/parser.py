@@ -111,7 +111,7 @@ class Parser:
             props_count = self.page.findAll("span", class_="numero ng-binding")
             if props_count:
                 try:
-                    props_count = int(props_count[-1:][0].text.replace(u"\xa0", ""))
+                    props_count = int(props_count[-1:][0].text.replace("\xa0", ""))
                     return ceil(props_count / 20)
                 except TypeError:
                     raise ("Value cannot be converted to string")

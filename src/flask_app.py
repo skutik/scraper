@@ -55,9 +55,7 @@ def insert_user(name, password, email):
 
 
 def fetch_user(email):
-    return loop.run_until_complete(
-        mongo_client.fetch_user(email=email)
-    )
+    return loop.run_until_complete(mongo_client.fetch_user(email=email))
 
 
 def fetch_filters():
@@ -71,10 +69,14 @@ def fetch_filters():
         ]
     return filters
 
+
 def update_user_preferences(user_id, category, values):
     return loop.run_until_complete(
-        mongo_client.upsert_user_preferences(email=user_id, filter_category=category, values=values))
-    
+        mongo_client.upsert_user_preferences(
+            email=user_id, filter_category=category, values=values
+        )
+    )
+
 
 app = Flask("__name__")
 app.secret_key = "NvTW%ac-c\a%5&AA8F6a"
@@ -147,20 +149,29 @@ def generate_profil_page():
         if not session.get("logged", False):
             return redirect("login")
         logging.debug(fetch_user(session["user_id"]))
-        session["filter_preferences"] = fetch_user(session["user_id"]).get("filter_preferences")
-        return render_template("profile.html", user_name=session["user_id"], main_category=filters["category_main_cb"], preferences=session["filter_preferences"].get("category_main_cb"),
+        session["filter_preferences"] = fetch_user(session["user_id"]).get(
+            "filter_preferences"
+        )
+        return render_template(
+            "profile.html",
+            user_name=session["user_id"],
+            main_category=filters["category_main_cb"],
+            preferences=session["filter_preferences"].get("category_main_cb"),
         )
     else:
         return "Unsupported method!"
+
 
 @app.route("/update_preferences", methods=["POST"])
 def update_preferences():
     if request.method == "POST":
         logging.debug(request.form.getlist("category_main_cb"))
-        result = update_user_preferences(session["user_id"], "category_main_cb", request.form.getlist("category_main_cb"))
+        result = update_user_preferences(
+            session["user_id"],
+            "category_main_cb",
+            request.form.getlist("category_main_cb"),
+        )
         logging.debug(result)
         return redirect("profile")
     else:
         return "Unsupported method!"
-
-

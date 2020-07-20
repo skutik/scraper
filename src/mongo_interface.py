@@ -48,9 +48,9 @@ class MongoInterface:
             "ok"
 
     async def fetch_user(self, email):
-        user_data = await self.mongo_client[self.database][self.users_collection].find_one(
-            {"_id": email}
-        )
+        user_data = await self.mongo_client[self.database][
+            self.users_collection
+        ].find_one({"_id": email})
         if user_data:
             del user_data["password"]
         return user_data
@@ -77,28 +77,29 @@ class MongoInterface:
         )
 
     async def fetch_estate(self, document_id):
-        return await self.mongo_client[self.database][self.estates_collection].find_one({"_id": document_id})
+        return await self.mongo_client[self.database][self.estates_collection].find_one(
+            {"_id": document_id}
+        )
 
     def fetch_estates(self, filter, projection, sort=None, limit=10):
-        return self.mongo_client[self.database][self.estates_collection].find(
-            filter=filter,
-            projection=projection,
-            limit=limit,
-            sort=sort
-        ).sort(sort).to_list(None) if sort else self.mongo_client[self.database][self.estates_collection].find(
-            filter=filter,
-            projection=projection,
-            limit=limit,
-            sort=sort
-        ).to_list(None)
+        return (
+            self.mongo_client[self.database][self.estates_collection]
+            .find(filter=filter, projection=projection, limit=limit, sort=sort)
+            .sort(sort)
+            .to_list(None)
+            if sort
+            else self.mongo_client[self.database][self.estates_collection]
+            .find(filter=filter, projection=projection, limit=limit, sort=sort)
+            .to_list(None)
+        )
 
     async def upsert_user_preferences(self, email, filter_category, values):
         # logging.debug(email)
         # logging.debug(filter_category)
         # logging.debug(values)
-        filters = await self.mongo_client[self.database][self.filters_collection].find_one(
-            {"_id": filter_category}
-        )
+        filters = await self.mongo_client[self.database][
+            self.filters_collection
+        ].find_one({"_id": filter_category})
         print(filters)
         response = await self.mongo_client[self.database][
             self.users_collection
@@ -109,9 +110,12 @@ class MongoInterface:
                     "created_at_utc": datetime.utcnow(),
                     "inserted_at_utc": datetime.utcnow(),
                 },
-                "$set": {"filter_preferences": 
-                    {filter_category: [filters.get(filter) for filter in values]}, 
-                    **{"last_update_utc": datetime.utcnow()}},
+                "$set": {
+                    "filter_preferences": {
+                        filter_category: [filters.get(filter) for filter in values]
+                    },
+                    **{"last_update_utc": datetime.utcnow()},
+                },
             },
             upsert=True,
         )
@@ -172,10 +176,10 @@ class MongoInterface:
 #                  'Energy Performance Rating': 'Třída C - Úsporná',
 #                  'Furnished': True}
 #
-    # client = MongoInterface(test_enviroment=True)
-    # loop = asyncio.get_event_loop()
-    # loop.run_until_complete(client.upsert_user_preferences("testovic1@email.com",
-    #     "category_main_cb",
-    #     ["Domy"]))
-    # loop.run_until_complete(client.test_find())
-    # loop.run_until_complete(client.upsert_property(123456, test_dict))
+# client = MongoInterface(test_enviroment=True)
+# loop = asyncio.get_event_loop()
+# loop.run_until_complete(client.upsert_user_preferences("testovic1@email.com",
+#     "category_main_cb",
+#     ["Domy"]))
+# loop.run_until_complete(client.test_find())
+# loop.run_until_complete(client.upsert_property(123456, test_dict))

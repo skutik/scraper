@@ -21,7 +21,7 @@ class Scraper:
         "floor_number",
         "usable_area",
         "estate_area",
-        "pois_in_place_distance"
+        "pois_in_place_distance",
     ]
     PROPERTY_ATTRIBUTES_MAP = {
         "Celková cena": "Total price",
@@ -70,29 +70,29 @@ class Scraper:
         "Plocha bazénu": "Basin area",
         "Provize": "Commission",
         "Průkaz energetické náročnosti budovy": "Energy Performance Certificate",
-        "Výtah":"Elevator",
-        "Znalecký posudek":"Expert judgement",
-        "Poloha domu":"Building situation",
-        "Minimální příhoz":"Minimum Bid",
-        "Umístění objektu":"Property location",
-        "Termín 1. prohlídky":"1st site visit date",
+        "Výtah": "Elevator",
+        "Znalecký posudek": "Expert judgement",
+        "Poloha domu": "Building situation",
+        "Minimální příhoz": "Minimum Bid",
+        "Umístění objektu": "Property location",
+        "Termín 1. prohlídky": "1st site visit date",
         "Typ domu": "House type",
         "Rok kolaudace": "Final building approval year",
-        "Datum zahájení prodeje":"Sales commencement date",
-        "Datum konání dražby":"Auction sale date",
-        "Bezbariérový":"Barrier-free access",
-        "Sklep":"Cellar",
-        "Vyvolávací cena":"Starting price",
-        "Bazén":"Basin",
-        "Poznámka k ceně":"Note on the price",
-        "Výška stropu":"Ceiling height",
-        "Plocha pozemku":"Land area",
-        "Datum ukončení výstavby":"Construction completion date",
-        "Stav":"Status",
-        "Plocha zastavěná":"Built up area",
-        "Cena":"Price",
-        "Ukazatel energetické náročnosti budovy":"Energy Performance Indicator",
-}
+        "Datum zahájení prodeje": "Sales commencement date",
+        "Datum konání dražby": "Auction sale date",
+        "Bezbariérový": "Barrier-free access",
+        "Sklep": "Cellar",
+        "Vyvolávací cena": "Starting price",
+        "Bazén": "Basin",
+        "Poznámka k ceně": "Note on the price",
+        "Výška stropu": "Ceiling height",
+        "Plocha pozemku": "Land area",
+        "Datum ukončení výstavby": "Construction completion date",
+        "Stav": "Status",
+        "Plocha zastavěná": "Built up area",
+        "Cena": "Price",
+        "Ukazatel energetické náročnosti budovy": "Energy Performance Indicator",
+    }
     URL_MAP = {
         "Prodej": "prodej",
         "Pronájem": "pronajem",
@@ -130,7 +130,7 @@ class Scraper:
         self.max_workers = max_workers
         self.mongo_client = MongoInterface(test_enviroment=test_enviroment)
 
-    #TODO: change for staticmethod
+    # TODO: change for staticmethod
     @property
     def _current_timestamp(self) -> int:
         """
@@ -188,7 +188,10 @@ class Scraper:
             for values in item.values():
                 for value_dict in values:
 
-                    if value_dict.get("values") and filters.get(value_dict["key"]) not in self.FILTERS_TO_IGNORE:
+                    if (
+                        value_dict.get("values")
+                        and filters.get(value_dict["key"]) not in self.FILTERS_TO_IGNORE
+                    ):
 
                         if not filters.get(value_dict["key"]):
                             filters[value_dict["key"]] = {}
@@ -252,7 +255,7 @@ class Scraper:
             "seo_locality": property_dict["seo"]["locality"],
             "seo_params": property_dict["seo"],
             "locality": property_dict["locality"]["value"],
-            "locality_district_id": property_dict["locality_district_id"]
+            "locality_district_id": property_dict["locality_district_id"],
         }
         if property_dict.get("contact"):
             if property_dict["contact"].get("phones"):
@@ -266,21 +269,33 @@ class Scraper:
             property["seller_name"] = property_dict["contact"].get("name")
         else:
             if property_dict["_embedded"].get("seller"):
-                property["seller_id"] = property_dict["_embedded"]["seller"].get("user_id")
+                property["seller_id"] = property_dict["_embedded"]["seller"].get(
+                    "user_id"
+                )
                 property["phone"] = [
                     f"""{"+" + phone.get("code", "") if len(phone.get("code", "")) > 0 else phone.get("code", "")}{phone.get("number")}"""
                     for phone in property_dict["_embedded"]["seller"].get("phones", [])
                 ]
-                property["seller_name"] = property_dict["_embedded"]["seller"].get("user_name")
+                property["seller_name"] = property_dict["_embedded"]["seller"].get(
+                    "user_name"
+                )
                 property["email"] = property_dict["_embedded"]["seller"].get("email")
-                if property_dict["_embedded"]["seller"].get("_embedded", {}).get("premise"):
-                    premise_dict = property_dict["_embedded"]["seller"]["_embedded"]["premise"]
+                if (
+                    property_dict["_embedded"]["seller"]
+                    .get("_embedded", {})
+                    .get("premise")
+                ):
+                    premise_dict = property_dict["_embedded"]["seller"]["_embedded"][
+                        "premise"
+                    ]
                     property["seller_website"] = premise_dict.get("www")
                     property["seller_company_id"] = premise_dict.get("company_id")
                     property["seller_company_name"] = premise_dict.get("name")
                     property["seller_company_email"] = premise_dict.get("email")
                     if property_dict.get("ask"):
-                        property["seller_company_address"] = premise_dict["ask"].get("address")
+                        property["seller_company_address"] = premise_dict["ask"].get(
+                            "address"
+                        )
                         property["seller_company_phones"] = [
                             f"""{"+" + phone.get("country_code", "") if len(phone.get("country_code", "")) > 0 else phone.get("country_code", "")}{phone.get("number")}"""
                             for phone in premise_dict["ask"].get("phones", [])
@@ -289,7 +304,9 @@ class Scraper:
         for item in property_dict["items"]:
             name = map_dict.get(item["name"], item["name"])
             if isinstance(item["value"], list):
-                property[name] = [self._convert_to_int(value["value"]) for value in item["value"]]
+                property[name] = [
+                    self._convert_to_int(value["value"]) for value in item["value"]
+                ]
             else:
                 property[name] = self._convert_to_int(item["value"])
             if item.get("currency"):
@@ -306,7 +323,7 @@ class Scraper:
             "category_main_cb": self.category_main,
             "category_type_cb": self.category_type,
             "per_page": self.per_page,
-            "tms": self._current_timestamp
+            "tms": self._current_timestamp,
         }
         if page:
             params.update({"page": page})
@@ -358,7 +375,9 @@ class Scraper:
                     self.filters, estate_dict["seo_params"], self.URL_MAP, hash_id
                 )
                 logging.debug(estate_dict["estate_url"])
-            response = await self.mongo_client.upsert_property(str(hash_id), estate_dict)
+            response = await self.mongo_client.upsert_property(
+                str(hash_id), estate_dict
+            )
             logging.debug(response)
 
     async def _process_estates_list(self, page=None, generate_list_producers=False):
