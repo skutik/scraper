@@ -15,6 +15,9 @@ logging.getLogger().setLevel(logging.DEBUG)
 
 
 class Scraper(ScraperBase):
+    name = "Sreality"
+    per_page = 100
+
     FILTERS_TO_IGNORE = [
         "distance",
         "special_price_switch",
@@ -27,18 +30,18 @@ class Scraper(ScraperBase):
         "pois_in_place_distance",
     ]
     PROPERTY_ATTRIBUTES_MAP = {
-        "Celková cena": "Total price",
-        "ID zakázky": "Order ID",
-        "Aktualizace": "Update",
-        "Stavba": "Building",
-        "Stav objektu": "Property status",
-        "Vlastnictví": "Ownership",
-        "Podlaží": "Floor",
-        "Užitná plocha": "Usable area",
+        "Celková cena": "total_price",
+        "ID zakázky": "order_id",
+        "Aktualizace": "update",
+        "Stavba": "building",
+        "Stav objektu": "property_status",
+        "Vlastnictví": "ownership",
+        "Podlaží": "floor",
+        "Užitná plocha": "usable_area",
         "Plocha podlahová": "Floorage",
         "Balkón": "Balcony",
         "Energetická náročnost budovy": "Energy Performance Rating",
-        "Vybavení": "Furnished",
+        "Vybavení": "furnished",
         "Náklady na bydlení": "Cost of living",
         "Plyn": "Gas",
         "Odpad": "Waste",
@@ -105,9 +108,6 @@ class Scraper(ScraperBase):
         "Domy": "dum",
         "Pozemky": "pozemek",
     }
-
-    name = "Sreality"
-    per_page = 100
 
     @property
     def _current_timestamp(self) -> int:
@@ -221,14 +221,13 @@ class Scraper(ScraperBase):
 
     # @staticmethod
     def _parse_estate(self, property_dict: dict, map_dict=None) -> dict:
-        if not map_dict:
-            map_dict = dict()
+        map_dict = map_dict or {}
         property = {
             "available": True,
             "lon": property_dict.get("map", {}).get("lon", 0),
             "lat": property_dict.get("map", {}).get("lat", 0),
             "price_czk": property_dict["price_czk"].get("value_raw", 0),
-            "price_czk_unit": property_dict["price_czk"].get("unit", ""),
+            "price_czk_unit": property_dict["price_czk"].get("unit"),
             "category_main_cb": property_dict["seo"]["category_main_cb"],
             "category_sub_cb": property_dict["seo"]["category_sub_cb"],
             "category_type_cb": property_dict["seo"]["category_type_cb"],
@@ -326,6 +325,44 @@ class Scraper(ScraperBase):
                 raise Exception(
                     f"{response.url} ended with status code {response.status}"
                 )
+
+    async def _process_estate(self, hash_id):
+        response_dict, status_code = await self._fetch_estate(hash_id)
+        estate_dict = (
+            self._parse_estate(response_dict, self.PROPERTY_ATTRIBUTES_MAP)
+            if status_code == 200
+            else response_dict
+        )
+        if estate_dict:
+            if estate_dict.get("seo_params"):
+                estate_dict["estate_url"] = self._generate_estate_url(
+                    self.redis_cache.get_dict("filters"),
+                    estate_dict["seo_params"],
+                    self.URL_MAP,
+                    hash_id,
+                )
+                # logging.debug(estate_dict["estate_url"])
+            response = await self.mongo_client.upsert_property(
+                str(hash_id), estate_dict
+            )
+            # logging.debug(response)
+
+    async def _process_estates_list(self, page=None, generate_list_producers=False):
+        reposne_dict, _ = await self._fetch_property_list(page=page)
+        estates, result_size = self._parse_property_list(reposne_dict)
+        # logging.debug(estates)
+        if generate_list_producers:
+            logging.debug(f"Result size {result_size}")
+            if result_size > self.per_page:
+                [
+                    await self._produce_estates_list(
+                        func=self._process_estates_list, page=page_number
+                    )
+                    for page_number in range(2, (ceil(result_size / self.per_page)) + 1)
+                ]
+        if estates:
+            for estate in estates:
+                await self.produce_estate(func=self._process_estate, hash_id=estate)
 
     async def _fetch_estate(self, hash_id):
         params = {"tms": self._current_timestamp}

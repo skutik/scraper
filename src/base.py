@@ -36,6 +36,7 @@ class ScraperBase(object):
         self.category_sub = args.cat_sub
         self.location_id = args.loc_id
         self.locality_region = args.loc_region
+        self.unique_attributes = set()
 
     @staticmethod
     @abstractmethod
@@ -47,55 +48,26 @@ class ScraperBase(object):
         pass
 
     @abstractmethod
-    def _parse_estate(self, property_dict: dict, map_dict=None, **kwargs) -> dict:
+    def _parse_estate(self, *args, **kwargs):
         pass
 
     @abstractmethod
-    async def _fetch_property_list(self, page=None, **kwargs):
+    async def _fetch_property_list(
+        self, page=None, generate_list_producers=False, **kwargs
+    ):
         pass
 
     @abstractmethod
-    async def _fetch_estate(self, estate_id):
+    async def _fetch_estate(self, *args, **kwargs):
         pass
 
-    async def _process_estate(self, hash_id):
-        response_dict, status_code = await self._fetch_estate(hash_id)
-        estate_dict = (
-            self._parse_estate(response_dict, self.PROPERTY_ATTRIBUTES_MAP)
-            if status_code == 200
-            else response_dict
-        )
-        if estate_dict:
-            if estate_dict.get("seo_params"):
-                estate_dict["estate_url"] = self._generate_estate_url(
-                    self.redis_cache.get_dict("filters"),
-                    estate_dict["seo_params"],
-                    self.URL_MAP,
-                    hash_id,
-                )
-                # logging.debug(estate_dict["estate_url"])
-            response = await self.mongo_client.upsert_property(
-                str(hash_id), estate_dict
-            )
-            # logging.debug(response)
+    @abstractmethod
+    async def _process_estate(self, *args, **kwargs):
+        pass
 
     @abstractmethod
-    async def _process_estates_list(self, page=None, generate_list_producers=False):
-        reposne_dict, _ = await self._fetch_property_list(page=page)
-        estates, result_size = self._parse_property_list(reposne_dict)
-        # logging.debug(estates)
-        if generate_list_producers:
-            logging.debug(f"Result size {result_size}")
-            if result_size > self.per_page:
-                [
-                    await self._produce_estates_list(
-                        func=self._process_estates_list, page=page_number
-                    )
-                    for page_number in range(2, (ceil(result_size / self.per_page)) + 1)
-                ]
-        if estates:
-            for estate in estates:
-                await self.produce_estate(func=self._process_estate, hash_id=estate)
+    async def _process_estates_list(self, *args, **kwargs):
+        pass
 
     async def _produce_estates_list(self, func, **kwargs):
         logging.debug(f"{func} with kwargs {kwargs} adding to queue.")
@@ -115,6 +87,7 @@ class ScraperBase(object):
 
     async def _worker(self) -> None:
         # await self._update_filters()
+        # TODO: rewrite funtion to generate list
         await self._process_estates_list(
             generate_list_producers=True
         )  # Gather information about other lists
@@ -134,3 +107,4 @@ class ScraperBase(object):
             return
         loop.run_until_complete(self._worker())
         loop.close()
+        logging.debug(f"Attributes: {self.unique_attributes}")
