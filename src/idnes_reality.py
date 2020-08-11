@@ -10,7 +10,7 @@ class Scraper(ScraperBase):
     name = "IdnesReality"
     base_url = "https://reality.idnes.cz/"
     ESTATE_ATTRIBUTES_MAP = {
-        "Číslo zakázky": "id",
+        "Číslo zakázky": "_id",
         "Užitná plocha": "usable_area",
         "Cena": "price_string",
         "Konstrukce budovy": "building",
@@ -119,7 +119,9 @@ class Scraper(ScraperBase):
                 estate_url if not isinstance(estate_url, yarl.URL) else str(estate_url)
             )
         logging.debug(estate_dict)
-        await self.mongo_client.upsert_property(str(estate_dict["id"]), estate_dict)
+
+        return estate_dict
+        # await self.mongo_client.upsert_property(str(estate_dict["id"]), estate_dict)
 
     async def _parse_property_list(self, list_html: str):
         property_links = get_xpath_data(

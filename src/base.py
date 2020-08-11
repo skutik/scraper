@@ -5,6 +5,7 @@ from math import ceil
 import json
 import asyncio
 import aiohttp
+import inspect
 from src.mongo_interface import MongoInterface
 from src.redis_interface import RedisInterface
 from abc import ABC, abstractmethod
@@ -14,6 +15,28 @@ logging.getLogger().setLevel(logging.DEBUG)
 
 
 class ScraperBase(object):
+
+    MANDATORY_KEYS = {
+        "_id": str,
+        # "agreement_type": int,
+        # "estate_type": int,
+        "price_czk": float,
+        "price_unit": str,
+        "building": str,
+        "usable_area": str,
+        "ownership": str,
+        "lon": float,
+        "lat": float,
+        "address": str,
+        "price_notes": str,
+        "url": str
+    }
+
+    extra_keys = [
+
+    ]
+
+
     def __init__(self):
         self.queue = asyncio.Queue()
         self.session = aiohttp.ClientSession()
@@ -63,7 +86,7 @@ class ScraperBase(object):
 
     @abstractmethod
     async def _process_estate(self, *args, **kwargs):
-        pass
+        yield
 
     @abstractmethod
     async def _process_estates_list(self, *args, **kwargs):
@@ -82,8 +105,28 @@ class ScraperBase(object):
             item = await self.queue.get()
             logging.debug(f"Consumer {consumer_id} has got item {item} for processing")
             fnc, kwargs = item[0], item[1]
-            await fnc(**kwargs)
+            res = await fnc(**kwargs)
             logging.debug(f"Consumer {consumer_id} has finished of item {item}.")
+            if fnc == self._process_estate:
+                return res
+
+    async def _upsert_estates(self, estates):
+        for estate in estates:
+            final_estate_dict = {}
+            for key, key_type in self.MANDATORY_KEYS.items():
+                try:
+                    value = estate.pop(key)
+                    final_estate_dict[key] = key_type(value) if value else value
+                except KeyError:
+                    logging.debug(f"Estate droppped due to missing key `{key}`.")
+                    continue
+
+            final_estate_dict["extra"] = estate
+            final_estate_dict["active"] = True
+            await self.mongo_client.upsert_property(final_estate_dict["_id"], final_estate_dict)
+
+
+
 
     async def _worker(self) -> None:
         # await self._update_filters()
@@ -95,9 +138,12 @@ class ScraperBase(object):
             asyncio.create_task(self._consumer(consumer_id))
             for consumer_id in range(1, self.max_workers + 1)
         ]
-        await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks)
+        await asyncio.gather(self._upsert_estates(estates=results))
         self.mongo_client.close()
         await self.session.close()
+
+    # def _p
 
     def runner(self) -> None:
         loop = asyncio.get_event_loop()
